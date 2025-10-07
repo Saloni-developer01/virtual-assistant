@@ -40,7 +40,7 @@ function SignIn (){
     }
 
     return (
-        <div className='w-full min-h-[100vh] bg-cover bg-no-repeat bg-[center_bottom_41%] flex justify-center items-center' style={{backgroundImage:`url(${bg})`}}>
+        <div className='w-full min-h-[100vh] bg-cover bg-no-repeat lg:bg-[center_bottom_41%] flex justify-center items-center' style={{backgroundImage:`url(${bg})`}}>
 
             <form className='w-[90%] h-[580px] max-w-[500px] bg-[#00000062] backdrop-blur shadow-lg shadow-blue-950 flex flex-col items-center justify-center gap-[20px] px-[20px]' onSubmit={handleSignIn}>
 
