@@ -9,10 +9,13 @@ import userRouter from './routes/user.route.js';
 import geminiResponse from './gemini.js';
 
 const app = express();
-app.use(cors({
-    origin: "https://virtual-assistant-0o83.onrender.com",
-    credentials: true
-}));
+// app.use(cors({
+//     origin: "https://virtual-assistant-0o83.onrender.com",
+//     credentials: true
+// }));
+
+
+app.use(cors());
 
 const port = process.env.PORT || 3000;
 app.use(express.json())
