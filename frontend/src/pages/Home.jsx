@@ -584,6 +584,22 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // import React, { useContext, useEffect, useState, useRef } from "react";
 // import { userDataContext } from "../context/UserContext.jsx";
 // import { useNavigate } from "react-router-dom";
@@ -1335,13 +1351,813 @@
 
 
 
+// import React, { useContext, useEffect, useState, useRef, useCallback } from "react";
+// import { userDataContext } from "../context/UserContext.jsx";
+// import { useNavigate } from "react-router-dom";
+// import axios from "axios";
+// import { TbMenuOrder, TbX } from "react-icons/tb";
+// import { TbArrowsCross } from "react-icons/tb";
+// import { FiSend, FiMic, FiMicOff } from "react-icons/fi"; // Added Mic icons
+
+// function Home() {
+//   const { userData, serverUrl, setUserData, getGeminiResponse } =
+//     useContext(userDataContext);
+//   const navigate = useNavigate();
+
+//   const [conversationLog, setConversationLog] = useState([]);
+//   const [status, setStatus] = useState(
+//     "Ready to Talk. Say " + (userData?.assistantName ? `"${userData.assistantName}"` : "your assistant's name")
+//   );
+  
+//   const [userInputText, setUserInputText] = useState("");
+//   const [isMicActive, setIsMicActive] = useState(false); // Changed to false initially, will start in useEffect
+//   const [isApiCalling, setIsApiCalling] = useState(false);
+//   const [isTTSActive, setIsTTSActive] = useState(false);
+
+//   const [recognition, setRecognition] = useState(null);
+
+//   const [hasInteracted, setHasInteracted] = useState(false);
+//   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+//   const [showInstructions, setShowInstructions] = useState(() => {
+//     const hasSeenInstructions = localStorage.getItem(
+//       "assistant_instructions_seen"
+//     );
+//     return hasSeenInstructions !== "true";
+//   });
+//   const [hamburgerOpen, setHamburgerOpen] = useState(false);
+
+//   const conversationEndRef = useRef(null);
+//   const backgroundMusicRef = useRef(null);
+//   const typingSoundRef = useRef(null);
+//   const synthRef = useRef(window.speechSynthesis);
+
+//   // Scroll to bottom of conversation log
+//   useEffect(() => {
+//     if (conversationEndRef.current) {
+//       conversationEndRef.current.scrollIntoView({ behavior: "smooth" });
+//     }
+//   }, [conversationLog]);
+
+//   // TTS status check
+//   useEffect(() => {
+//     const synth = synthRef.current;
+//     if (!synth) return;
+
+//     const onEnd = () => {
+//       setIsTTSActive(false);
+//       // If mic was temporarily stopped for TTS, restart it
+//       if (!isApiCalling && !userInputText.trim()) {
+//         setIsMicActive(true); 
+//       }
+//     };
+
+//     synth.addEventListener('end', onEnd);
+//     return () => synth.removeEventListener('end', onEnd);
+//   }, [isApiCalling, userInputText]);
+
+
+//   const speakAssistantResponse = useCallback((text) => {
+//     if (synthRef.current.speaking) {
+//       synthRef.current.cancel();
+//     }
+//     const utterance = new SpeechSynthesisUtterance(text);
+    
+//     utterance.onstart = () => setIsTTSActive(true);
+//     // Utterance.onend is handled by the main useEffect listener
+    
+//     synthRef.current.speak(utterance);
+//   }, []);
+
+//   const stopTypingSound = () => {
+//     if (typingSoundRef.current) {
+//       typingSoundRef.current.pause();
+//       typingSoundRef.current.currentTime = 0;
+//     }
+//   };
+
+//   const startTypingSound = () => {
+//     if (typingSoundRef.current) {
+//       typingSoundRef.current.loop = true;
+//       typingSoundRef.current.play().catch(() => {});
+//     }
+//   };
+
+//   const startMic = useCallback(() => {
+//       if (recognition && !isApiCalling) {
+//           try {
+//               recognition.start();
+//               setIsMicActive(true);
+//               setStatus("Mic Active. Listening...");
+//               console.log("Mic Started.");
+//           } catch (e) {
+//               console.warn("Recognition start error:", e.message);
+//               // Already running error is common, so only show error status for other issues
+//               if (!e.message.includes("already started")) {
+//                 setStatus("Mic Error: Try restarting manually.");
+//               }
+//           }
+//       }
+//   }, [recognition, isApiCalling]);
+
+
+//   const callGeminiAPI = async (transcript, isVoiceInput) => {
+//     setIsApiCalling(true);
+    
+//     // Stop mic definitively before API call, regardless of input type
+//     if (recognition) {
+//         recognition.stop();
+//         setIsMicActive(false);
+//     }
+    
+//     setStatus("Thinking...");
+//     startTypingSound();
+
+//     try {
+//       const data = await getGeminiResponse(transcript);
+
+//       stopTypingSound();
+
+//       if (data && data.response) {
+//         setConversationLog((prevLog) => [
+//           ...prevLog,
+//           { source: "assistant", text: data.response },
+//         ]);
+
+//         speakAssistantResponse(data.response); // Assistant speaks the response
+//         handleCommand(data);
+        
+//         // Update status based on input type
+//         if (isVoiceInput) {
+//             setStatus("Reply Shown. Waiting for Voice...");
+//         } else {
+//             setStatus("Reply Shown. Ready for Next.");
+//         }
+//       } else {
+//         setStatus("Assistant did not return a response.");
+//       }
+//     } catch (error) {
+//       stopTypingSound();
+//       console.error("Gemini API Error:", error);
+//       setStatus(
+//         `Error: API failed (${
+//           error.response?.status || error.message
+//         }). Try again.`
+//       );
+//     } finally {
+//       setIsApiCalling(false);
+//       // 2. Restart Mic only if it was a voice input AND TTS is not active
+//       if (isVoiceInput && !synthRef.current.speaking) {
+//           setTimeout(startMic, 1000); // Give a small delay
+//       }
+//     }
+//   };
+
+//   // --- Handlers for user interactions ---
+
+//   const handleLogout = async () => {
+//     // Stop everything
+//     if (synthRef.current.speaking) {
+//       synthRef.current.cancel();
+//     }
+//     stopTypingSound();
+//     if (recognition) {
+//       recognition.stop();
+//       setIsMicActive(false);
+//     }
+
+//     try {
+//       localStorage.removeItem("assistant_instructions_seen");
+
+//       await axios.get(`${serverUrl}/api/user/logout`, {
+//         withCredentials: true,
+//       });
+//       setUserData(null);
+//       navigate("/signin");
+//     } catch (error) {
+//       // Even if logout API fails, clear client side data and navigate
+//       localStorage.removeItem("assistant_instructions_seen");
+//       setUserData(null);
+//       console.log(error);
+//       navigate("/signin");
+//     }
+//   };
+
+//   // Handler for text input
+//   const handleTextInput = (e) => {
+//     e.preventDefault();
+//     const trimmedInput = userInputText.trim();
+//     if (!trimmedInput || isApiCalling) return;
+    
+//     // Set status to show typing is happening
+//     setStatus("Typing Conversation Active..."); 
+
+//     // Stop mic if it was active
+//     if (recognition) {
+//         recognition.stop();
+//         setIsMicActive(false);
+//     }
+
+//     // Add user text message to log
+//     setConversationLog((prevLog) => [
+//       ...prevLog,
+//       { source: "user", text: trimmedInput },
+//     ]);
+//     setUserInputText(""); // Clear input field
+
+//     // Check if the user's message contains the assistant's name (optional but good for consistency)
+//     const assistantName = userData?.assistantName?.toLowerCase();
+//     const callText = trimmedInput.toLowerCase().includes(assistantName)
+//       ? trimmedInput
+//       : `${assistantName}, ${trimmedInput}`;
+
+//     callGeminiAPI(callText, false); // Pass 'false' for isVoiceInput
+//   };
+
+//   const handleCommand = (data) => {
+//     const { type, userInput } = data;
+//     if (
+//       type === "google-search" ||
+//       type === "calculator-open" ||
+//       type === "weather-show"
+//     ) {
+//       const query =
+//         type === "calculator-open"
+//           ? "calculator"
+//           : type === "weather-show"
+//           ? "weather"
+//           : userInput;
+//       const encodedQuery = encodeURIComponent(query);
+//       window.open(`https://www.google.com/search?q=${encodedQuery}`, "_blank");
+//     }
+
+//     if (type === "instagram-open") {
+//       window.open(`https://www.instagram.com/`, "_blank");
+//     }
+
+//     if (type === "facebook-open") {
+//       window.open(`https://www.facebook.com/`, "_blank");
+//     }
+
+//     if (type === "youtube-search" || type === "youtube-play") {
+//       const query = encodeURIComponent(userInput);
+//       window.open(
+//         `https://www.youtube.com/results?search_query=${query}`,
+//         "_blank"
+//       );
+//     }
+
+//     if (
+//       [
+//         "general",
+//         "get-news",
+//         "get-joke",
+//         "get-quote",
+//         "get-fact",
+//         "get-definition",
+//         "get-synonym",
+//         "get-antonym",
+//       ].includes(type)
+//     ) {
+//       return;
+//     }
+//   };
+
+//   const handlePlayMusic = () => {
+//     if (backgroundMusicRef.current && backgroundMusicRef.current.paused) {
+//       backgroundMusicRef.current.volume = 0.3;
+//       backgroundMusicRef.current.loop = true;
+//       backgroundMusicRef.current
+//         .play()
+//         .catch((e) => console.log("Music play failed:", e));
+//     }
+//   };
+
+//   // --- Speech Recognition Setup ---
+//   useEffect(() => {
+//     if (showInstructions) {
+//       localStorage.setItem("assistant_instructions_seen", "true");
+//     }
+
+//     const SpeechRecognition =
+//       window.SpeechRecognition || window.webkitSpeechRecognition;
+
+//     if (!SpeechRecognition) {
+//       console.error("Speech Recognition not supported in this browser.");
+//       setStatus("Voice Input Error: Not Supported.");
+//       return;
+//     }
+
+//     const recognitionInstance = new SpeechRecognition();
+//     recognitionInstance.continuous = true; // Use continuous to keep it listening
+//     recognitionInstance.interimResults = false; // Only final results
+//     recognitionInstance.lang = "en-US";
+//     setRecognition(recognitionInstance);
+
+//     recognitionInstance.onresult = async (e) => {
+//         // Find the latest result that is 'final'
+//         const last = e.results.length - 1;
+//         const transcript = e.results[last][0].transcript.trim();
+
+//         // Check if the transcript is empty or too short (false positive)
+//         if (transcript.length < 3) return; 
+
+//         // Stop recognition to process the result
+//         recognitionInstance.stop();
+//         setIsMicActive(false);
+
+//         setStatus("Heard You. Thinking...");
+
+//         if (
+//             transcript
+//             .toLowerCase()
+//             .includes(userData?.assistantName?.toLowerCase())
+//         ) {
+//             setConversationLog((prevLog) => [
+//             ...prevLog,
+//             { source: "user", text: transcript },
+//             ]);
+
+//             await callGeminiAPI(transcript, true);
+//         } else {
+//             setStatus(`Didn't hear "${userData?.assistantName}". Please say the name to start.`);
+//             // Restart mic after a short delay if wake word wasn't heard
+//             setTimeout(startMic, 1500);
+//         }
+//     };
+
+//     recognitionInstance.onend = function () {
+//       console.log("Recognition ended. isMicActive:", isMicActive, "isApiCalling:", isApiCalling);
+//       // Only restart if Mic is expected to be active (not during API call or TTS)
+//       if (isMicActive && !isApiCalling && !isTTSActive) {
+//         console.log("Recognition restarting...");
+//         startMic(); 
+//       } else if (!isApiCalling && !isTTSActive) {
+//           // If stopped due to API/Typing, and now available, set status for manual start
+//           setStatus("Mic Stopped. Click here to start voice input.");
+//       }
+//     };
+
+//     recognitionInstance.onerror = function (e) {
+//       console.error("Recognition error:", e);
+//       // Only restart if the error is not 'no-speech' (which is expected during silence)
+//       if (e.error !== 'no-speech') {
+//         setStatus(`Mic Error (${e.error}). Trying to restart...`);
+//         setIsMicActive(true); // Signal to onend to attempt restart
+//       } else {
+//           // No speech error, just attempt a clean restart
+//           setIsMicActive(true);
+//       }
+//     };
+
+//     // Initial start attempt
+//     startMic();
+
+//     // Cleanup function
+//     return () => {
+//       if (recognitionInstance) {
+//         recognitionInstance.stop();
+//       }
+//       if (synthRef.current.speaking) {
+//         synthRef.current.cancel();
+//       }
+//       if (backgroundMusicRef.current) backgroundMusicRef.current.pause();
+//       stopTypingSound();
+//       setRecognition(null);
+//     };
+//   }, [userData?.assistantName, getGeminiResponse, startMic, isMicActive, isApiCalling, isTTSActive]);
+
+//   return (
+//     <div
+//       className="min-h-screen bg-gradient-to-t from-[#fffff] to-[#48A1B1] overflow-x-hidden relative"
+//       onClick={() => {
+//         setHasInteracted(true);
+//         setShowInstructions(false);
+//         handlePlayMusic(); // Play music on first interaction
+//       }}
+//     >
+//       {showInstructions && (
+//         <div className="fixed inset-0 bg-[#00000020] backdrop-blur-lg flex items-center justify-center z-50 p-4">
+//           <div className="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full relative">
+//             <h2 className="text-2xl font-bold text-[#50A5B4] mb-4">
+//               Welcome to Your Assistant!
+//             </h2>
+
+//             <ul className="text-gray-700 space-y-3 list-disc list-inside">
+//               <li>Make sure your **microphone** is enabled and working.</li>
+//               <li>
+//                 Your **typing sound** will start playing after your first
+//                 interaction.
+//               </li>
+//               <li>
+//                 **VOICE:** The assistant will **only** respond if you start
+//                 your query by saying its name (e.g., **"
+//                 {userData?.assistantName}"**).
+//               </li>
+//               <li>
+//                 **STATUS:** Check the status below the assistant's name. Yellow
+//                 text indicates its current state.
+//               </li>
+//               <li>
+//                 You can now **type** in the chat box at the bottom, or talk to
+//                 it.
+//               </li>
+//             </ul>
+//             <p className="mt-6 text-xl font-bold text-center text-gray-800">
+//               Enjoy your conversation! 🎉
+//             </p>
+//             <p className="mt-4 text-sm text-gray-500">
+//               (This popup will disappear when you click anywhere on the screen.)
+//             </p>
+
+//             <button
+//               onClick={(e) => {
+//                 e.stopPropagation();
+//                 setShowInstructions(false);
+//                 setHasInteracted(true);
+//                 handlePlayMusic();
+//               }}
+//               className="absolute top-3 right-3 text-gray-500 hover:text-gray-900 text-3xl font-light cursor-pointer"
+//             >
+//               <TbArrowsCross className="w-[20px] h-[25px]" />
+//             </button>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Header/Nav */}
+//       <div className="w-full h-[12vh] flex items-center justify-end pr-5 lg:pr-10">
+//         <div className="hidden lg:flex gap-[20px]">
+//           <button
+//             className="min-w-[150px] h-[50px] text-black font-semibold bg-white rounded-lg text-[19px] px-[20px] py-[10px] cursor-pointer hover:bg-gray-100 transition-colors"
+//             onClick={() => {
+//               navigate("/customize");
+//             }}
+//           >
+//             Customize your Assistant
+//           </button>
+
+//           <button
+//             className="min-w-[150px] h-[50px] text-black font-semibold bg-white rounded-lg text-[19px] px-[20px] py-[10px] cursor-pointer hover:bg-gray-100 transition-colors"
+//             onClick={() => setShowHistoryDrawer(!showHistoryDrawer)}
+//           >
+//             History
+//           </button>
+
+//           <button
+//             className="min-w-[150px] h-[50px] text-black font-semibold bg-white rounded-lg text-[19px] px-[20px] py-[10px] cursor-pointer hover:bg-gray-100 transition-colors"
+//             onClick={handleLogout}
+//           >
+//             Log Out
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* Mobile Hamburger Icon & Drawer */}
+//       <TbMenuOrder
+//         className="lg:hidden text-white absolute top-[20px] right-[20px] w-[35px] h-[35px] cursor-pointer z-50"
+//         onClick={() => setHamburgerOpen(true)}
+//       />
+
+//       <div
+//         className={`fixed lg:hidden top-0 right-0 w-3/4 max-w-[300px] h-full 
+//           bg-[#48A1B1] bg-opacity-90 backdrop-blur-md 
+//           p-5 flex flex-col gap-5 
+//           z-50 shadow-2xl
+//           transition-transform duration-300 ease-in-out
+//           ${hamburgerOpen ? "translate-x-0" : "translate-x-full"}`}
+//       >
+//         <TbArrowsCross
+//           className="text-white absolute top-[20px] right-[20px] w-[30px] h-[30px] cursor-pointer z-50"
+//           onClick={() => setHamburgerOpen(false)}
+//         />
+
+//         <div className="mt-[60px] flex flex-col gap-4 w-full">
+//           <button
+//             className="w-full h-[50px] text-black font-semibold bg-white rounded-lg text-[18px] px-3 py-2 cursor-pointer text-left hover:bg-gray-100 transition-colors"
+//             onClick={() => {
+//               setHamburgerOpen(false);
+//               navigate("/customize");
+//             }}
+//           >
+//             Customize Assistant
+//           </button>
+
+//           <button
+//             className="w-full h-[50px] text-black font-semibold bg-white rounded-lg text-[18px] px-3 py-2 cursor-pointer text-left hover:bg-gray-100 transition-colors"
+//             onClick={() => {
+//               setHamburgerOpen(false);
+//               setShowHistoryDrawer(true);
+//             }}
+//           >
+//             History
+//           </button>
+
+//           <button
+//             className="w-full h-[50px] text-black font-semibold bg-white rounded-lg text-[18px] px-3 py-2 cursor-pointer text-left hover:bg-gray-100 transition-colors"
+//             onClick={handleLogout}
+//           >
+//             Log Out
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* History Drawer */}
+//       {showHistoryDrawer && (
+//         <div
+//           className="fixed inset-0 bg-transparent z-[60]"
+//           onClick={() => setShowHistoryDrawer(false)}
+//         >
+//           <div
+//             className="absolute top-0 right-0 h-full w-full max-w-sm md:max-w-[400px] 
+//             bg-white backdrop-blur-lg 
+//             border-l border-white/20 
+//             z-[70] p-5 shadow-2xl transition-transform duration-300 ease-in-out 
+//             lg:bg-gradient-to-br lg:from-white/10 lg:to-[#48A1B1]/30"
+//             onClick={(e) => e.stopPropagation()}
+//           >
+//             <div className="flex justify-between items-center mb-6">
+//               <h2 className="text-2xl font-bold text-[#5A655A]">
+//                 Conversation History
+//               </h2>
+//               <TbX
+//                 className="text-[#5A655A] w-8 h-8 cursor-pointer hover:text-red-400 z-[80]"
+//                 onClick={() => {
+//                   setShowHistoryDrawer(false);
+//                 }}
+//               />
+//             </div>
+//             <div className="w-full h-[90%] overflow-y-auto flex flex-col gap-[15px] p-1">
+//               {userData?.history?.length === 0 ? (
+//                 <p className="text-gray-400 mt-4 text-sm">
+//                   No past conversations found.
+//                 </p>
+//               ) : (
+//                 userData?.history
+//                   ?.slice()
+//                   .reverse()
+//                   .map((item, index) => (
+//                     <div
+//                       key={index}
+//                       className=" bg-[#01A6F0] p-3 rounded-lg shadow-lg hover:bg-white/10 transition-colors border-l-4 border-[#F78B00] shadow-md"
+//                     >
+//                       <p className="text-grey text-sm font-bold mb-1">
+//                         You:
+//                         <span className="text-gray-700 font-normal ml-2">
+//                           {item.user}
+//                         </span>
+//                       </p>
+//                       <p className="text-grey text-sm font-bold mt-2">
+//                         {userData?.assistantName}:
+//                         <span className="text-gray-700 font-normal ml-2 line-clamp-2">
+//                           {item.assistant}
+//                         </span>
+//                       </p>
+//                     </div>
+//                   ))
+//               )}
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Main Content Area */}
+//       <div
+//         className="w-full p-5 pt-0 lg:p-10 lg:pt-5"
+//         onClick={handlePlayMusic}
+//       >
+//         <audio ref={typingSoundRef} src="/sounds/typing.mp3" preload="auto" />
+//         {/* <audio ref={backgroundMusicRef} src="/sounds/background.mp3" preload="auto" /> */}
+
+//         <div className="flex flex-col lg:flex-row gap-10 lg:gap-[100px] justify-center lg:justify-start items-center lg:items-start min-h-[calc(100vh-12vh)] lg:min-h-[calc(100vh-12vh-40px)]">
+//           {/* Assistant Info */}
+//           <div className="flex flex-col items-center lg:items-start mt-10 lg:mt-0">
+//             <div className="w-[180px] h-[180px] md:w-[200px] md:h-[200px] flex overflow-hidden shadow-lg shadow-[white] p-[10px] rounded-md">
+//               <img
+//                 src={userData?.assistantImage}
+//                 alt="Assistant Image"
+//                 className="h-full w-full object-cover rounded-md"
+//               />
+//             </div>
+
+//             <h1 className="text-white text-[22px] font-bold text-center mt-4">
+//               I'm {userData?.assistantName}
+//             </h1>
+            
+//             {/* Status and Mic Button */}
+//             <p 
+//                 className="text-[#F78B00] text-[17px] font-medium mt-2 text-center max-w-[200px] cursor-pointer transition-colors hover:text-red-400"
+//                 onClick={!isMicActive && !isApiCalling ? startMic : null} // Manual restart on click
+//             >
+//               <span className="flex items-center justify-center gap-2">
+//                 {isMicActive ? <FiMic className="text-green-400 w-5 h-5 animate-pulse" /> : <FiMicOff className="text-gray-400 w-5 h-5" />}
+//                 {status}
+//               </span>
+//             </p>
+            
+//           </div>
+
+//           {/* Chat Window */}
+//           <div className="w-full max-w-4xl lg:max-w-[700px] flex flex-col">
+//             <div className="p-4 md:p-[30px] bg-white bg-opacity-10 rounded-t-lg overflow-y-auto h-[60vh] lg:h-[450px] border border-[#FF3366]/20 backdrop-blur-sm shadow-xl">
+//               {conversationLog.length === 0 && (
+//                 <div className="flex items-center justify-center h-full">
+//                   <p className="text-gray-500 text-lg font-medium text-center p-4 select-none">
+//                     Your conversations will appear here. Start by saying: "
+//                     <strong className="text-gray-500">
+//                       {userData?.assistantName}
+//                     </strong>
+//                     ..." or type below.
+//                   </p>
+//                 </div>
+//               )}
+
+//               <div className="space-y-4">
+//                 {conversationLog.map((item, index) => (
+//                   <div
+//                     key={index}
+//                     className={`flex ${
+//                       item.source === "user" ? "justify-end" : "justify-start"
+//                     }`}
+//                   >
+//                     <div
+//                       className={`p-3 rounded-xl max-w-[80%] md:max-w-[70%] text-sm md:text-base shadow-md ${
+//                         item.source === "user"
+//                           ? "bg-blue-500 text-white rounded-br-none"
+//                           : "bg-gray-200 text-gray-800 rounded-tl-none"
+//                       }`}
+//                     >
+//                       <strong className="capitalize">{item.source}:</strong>{" "}
+//                       {item.text}
+//                     </div>
+//                   </div>
+//                 ))}
+//                 {/* Ref for auto-scrolling */}
+//                 <div ref={conversationEndRef} />
+//               </div>
+//             </div>
+
+//             {/* Input Box for Typing */}
+//             <form
+//               onSubmit={handleTextInput}
+//               className="flex w-full bg-white bg-opacity-20 backdrop-blur-sm rounded-b-lg border border-[#FF3366]/20 p-2 shadow-xl"
+//             >
+//               <input
+//                 type="text"
+//                 value={userInputText}
+//                 onChange={(e) => {
+//                     setUserInputText(e.target.value);
+//                     // Temporarily update status when user is typing
+//                     if (!isApiCalling) {
+//                         setStatus("Typing Conversation Active...");
+//                     }
+//                 }}
+//                 onFocus={() => {
+//                     // Stop listening when user focuses on input
+//                     if (recognition) {
+//                         recognition.stop();
+//                         setIsMicActive(false);
+//                     }
+//                     if (!isApiCalling) {
+//                         setStatus("Typing Conversation Active...");
+//                     }
+//                 }}
+//                 onBlur={() => {
+//                     // Restart mic if input is empty after unfocusing
+//                     if (!userInputText.trim() && !isApiCalling && !isTTSActive) {
+//                        startMic();
+//                     }
+//                 }}
+//                 placeholder={`Type your message here (e.g., "${userData?.assistantName}, what is the weather?")...`}
+//                 className="flex-grow p-3 bg-transparent text-white placeholder-gray-200 focus:outline-none text-base md:text-lg"
+//                 disabled={isApiCalling}
+//               />
+//               <button
+//                 type="submit"
+//                 className="p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400"
+//                 disabled={!userInputText.trim() || isApiCalling}
+//               >
+//                 <FiSend className="w-6 h-6" />
+//               </button>
+//             </form>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+// export default Home;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import React, { useContext, useEffect, useState, useRef, useCallback } from "react";
 import { userDataContext } from "../context/UserContext.jsx";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { TbMenuOrder, TbX } from "react-icons/tb";
 import { TbArrowsCross } from "react-icons/tb";
-import { FiSend, FiMic, FiMicOff } from "react-icons/fi"; // Added Mic icons
+import { FiSend, FiMic, FiMicOff } from "react-icons/fi"; 
 
 function Home() {
   const { userData, serverUrl, setUserData, getGeminiResponse } =
@@ -1350,13 +2166,13 @@ function Home() {
 
   const [conversationLog, setConversationLog] = useState([]);
   const [status, setStatus] = useState(
-    "Ready to Talk. Say " + (userData?.assistantName ? `"${userData.assistantName}"` : "your assistant's name")
+    "Mic is OFF. Click the button to speak."
   );
   
   const [userInputText, setUserInputText] = useState("");
-  const [isMicActive, setIsMicActive] = useState(false); // Changed to false initially, will start in useEffect
+  // isMicActive now strictly represents if the mic is *currently* running
+  const [isMicActive, setIsMicActive] = useState(false); 
   const [isApiCalling, setIsApiCalling] = useState(false);
-  const [isTTSActive, setIsTTSActive] = useState(false);
 
   const [recognition, setRecognition] = useState(null);
 
@@ -1382,35 +2198,36 @@ function Home() {
     }
   }, [conversationLog]);
 
-  // TTS status check
-  useEffect(() => {
-    const synth = synthRef.current;
-    if (!synth) return;
-
-    const onEnd = () => {
-      setIsTTSActive(false);
-      // If mic was temporarily stopped for TTS, restart it
-      if (!isApiCalling && !userInputText.trim()) {
-        setIsMicActive(true); 
-      }
-    };
-
-    synth.addEventListener('end', onEnd);
-    return () => synth.removeEventListener('end', onEnd);
-  }, [isApiCalling, userInputText]);
-
-
-  const speakAssistantResponse = useCallback((text) => {
+  const stopSpeaking = () => {
     if (synthRef.current.speaking) {
       synthRef.current.cancel();
     }
+  };
+
+  const speakAssistantResponse = useCallback((text) => {
+    stopSpeaking();
+    
     const utterance = new SpeechSynthesisUtterance(text);
     
-    utterance.onstart = () => setIsTTSActive(true);
-    // Utterance.onend is handled by the main useEffect listener
+    utterance.onstart = () => {
+      // Temporarily stop mic if it was running while starting TTS
+      if (recognition) {
+          recognition.stop();
+          setIsMicActive(false);
+      }
+    };
+
+    utterance.onend = () => {
+      // After speaking ends, if no API call or typing is happening, restart mic
+      if (!isApiCalling && !userInputText.trim()) {
+        // Give a slight delay before attempting to restart mic
+        setTimeout(manualToggleMic, 500);
+      }
+    };
     
     synthRef.current.speak(utterance);
-  }, []);
+  }, [recognition, isApiCalling, userInputText]);
+
 
   const stopTypingSound = () => {
     if (typingSoundRef.current) {
@@ -1426,33 +2243,52 @@ function Home() {
     }
   };
 
+  const stopMic = useCallback(() => {
+    if (recognition) {
+        recognition.stop();
+        setIsMicActive(false);
+        console.log("Mic Stopped by logic.");
+        setStatus("Mic is OFF. Click the button to speak.");
+    }
+  }, [recognition]);
+  
   const startMic = useCallback(() => {
       if (recognition && !isApiCalling) {
           try {
               recognition.start();
               setIsMicActive(true);
-              setStatus("Mic Active. Listening...");
-              console.log("Mic Started.");
+              setStatus("Mic ACTIVE. Say " + (userData?.assistantName ? `"${userData.assistantName}"` : "name"));
+              console.log("Mic Started by logic.");
           } catch (e) {
-              console.warn("Recognition start error:", e.message);
-              // Already running error is common, so only show error status for other issues
+              console.warn("Recognition start error (likely already running or permissions):", e.message);
+              // If it failed to start, set the status accordingly
               if (!e.message.includes("already started")) {
-                setStatus("Mic Error: Try restarting manually.");
+                setStatus("Mic Error: Try clicking the button.");
+                setIsMicActive(false);
               }
           }
       }
-  }, [recognition, isApiCalling]);
+  }, [recognition, isApiCalling, userData]);
 
+  const manualToggleMic = () => {
+      if (isApiCalling) return;
+
+      if (isMicActive) {
+          stopMic();
+      } else {
+          // Stop TTS if it's talking before starting mic
+          stopSpeaking();
+          startMic();
+      }
+  };
 
   const callGeminiAPI = async (transcript, isVoiceInput) => {
     setIsApiCalling(true);
     
-    // Stop mic definitively before API call, regardless of input type
-    if (recognition) {
-        recognition.stop();
-        setIsMicActive(false);
-    }
-    
+    // Stop mic definitively before API call
+    stopMic();
+    stopSpeaking(); // Just in case
+
     setStatus("Thinking...");
     startTypingSound();
 
@@ -1470,9 +2306,10 @@ function Home() {
         speakAssistantResponse(data.response); // Assistant speaks the response
         handleCommand(data);
         
-        // Update status based on input type
+        // Update status for the next action
         if (isVoiceInput) {
-            setStatus("Reply Shown. Waiting for Voice...");
+            // TTS onend will handle restarting the mic
+            setStatus("Reply Shown. Assistant Speaking...");
         } else {
             setStatus("Reply Shown. Ready for Next.");
         }
@@ -1485,13 +2322,13 @@ function Home() {
       setStatus(
         `Error: API failed (${
           error.response?.status || error.message
-        }). Try again.`
+        }). Ready for new input.`
       );
     } finally {
       setIsApiCalling(false);
-      // 2. Restart Mic only if it was a voice input AND TTS is not active
-      if (isVoiceInput && !synthRef.current.speaking) {
-          setTimeout(startMic, 1000); // Give a small delay
+      // If text input was used, don't auto-start mic
+      if (!isVoiceInput) {
+        setStatus("Reply Shown. Ready for Next.");
       }
     }
   };
@@ -1499,15 +2336,9 @@ function Home() {
   // --- Handlers for user interactions ---
 
   const handleLogout = async () => {
-    // Stop everything
-    if (synthRef.current.speaking) {
-      synthRef.current.cancel();
-    }
+    stopSpeaking();
+    stopMic();
     stopTypingSound();
-    if (recognition) {
-      recognition.stop();
-      setIsMicActive(false);
-    }
 
     try {
       localStorage.removeItem("assistant_instructions_seen");
@@ -1518,7 +2349,6 @@ function Home() {
       setUserData(null);
       navigate("/signin");
     } catch (error) {
-      // Even if logout API fails, clear client side data and navigate
       localStorage.removeItem("assistant_instructions_seen");
       setUserData(null);
       console.log(error);
@@ -1532,15 +2362,9 @@ function Home() {
     const trimmedInput = userInputText.trim();
     if (!trimmedInput || isApiCalling) return;
     
-    // Set status to show typing is happening
-    setStatus("Typing Conversation Active..."); 
-
     // Stop mic if it was active
-    if (recognition) {
-        recognition.stop();
-        setIsMicActive(false);
-    }
-
+    stopMic();
+    
     // Add user text message to log
     setConversationLog((prevLog) => [
       ...prevLog,
@@ -1632,21 +2456,19 @@ function Home() {
     }
 
     const recognitionInstance = new SpeechRecognition();
-    recognitionInstance.continuous = true; // Use continuous to keep it listening
-    recognitionInstance.interimResults = false; // Only final results
+    recognitionInstance.continuous = false; // MAJOR FIX: Set to false for single command
+    recognitionInstance.interimResults = false;
     recognitionInstance.lang = "en-US";
     setRecognition(recognitionInstance);
 
     recognitionInstance.onresult = async (e) => {
-        // Find the latest result that is 'final'
         const last = e.results.length - 1;
         const transcript = e.results[last][0].transcript.trim();
 
-        // Check if the transcript is empty or too short (false positive)
         if (transcript.length < 3) return; 
 
-        // Stop recognition to process the result
-        recognitionInstance.stop();
+        // Stop mic immediately after getting the result
+        recognitionInstance.stop(); 
         setIsMicActive(false);
 
         setStatus("Heard You. Thinking...");
@@ -1663,52 +2485,38 @@ function Home() {
 
             await callGeminiAPI(transcript, true);
         } else {
-            setStatus(`Didn't hear "${userData?.assistantName}". Please say the name to start.`);
-            // Restart mic after a short delay if wake word wasn't heard
-            setTimeout(startMic, 1500);
+            setStatus(`Didn't hear "${userData?.assistantName}". Click mic to try again.`);
+            // Do NOT auto-restart here, let the user click the mic button
         }
     };
 
     recognitionInstance.onend = function () {
-      console.log("Recognition ended. isMicActive:", isMicActive, "isApiCalling:", isApiCalling);
-      // Only restart if Mic is expected to be active (not during API call or TTS)
-      if (isMicActive && !isApiCalling && !isTTSActive) {
-        console.log("Recognition restarting...");
-        startMic(); 
-      } else if (!isApiCalling && !isTTSActive) {
-          // If stopped due to API/Typing, and now available, set status for manual start
-          setStatus("Mic Stopped. Click here to start voice input.");
+      console.log("Recognition ended. Status:", isMicActive ? "ACTIVE" : "INACTIVE");
+      // If mic was active but stopped unexpectedly, update status
+      if (isMicActive) {
+          setIsMicActive(false);
+          setStatus("Mic Stopped. Click the button to speak.");
       }
     };
 
     recognitionInstance.onerror = function (e) {
       console.error("Recognition error:", e);
-      // Only restart if the error is not 'no-speech' (which is expected during silence)
-      if (e.error !== 'no-speech') {
-        setStatus(`Mic Error (${e.error}). Trying to restart...`);
-        setIsMicActive(true); // Signal to onend to attempt restart
-      } else {
-          // No speech error, just attempt a clean restart
-          setIsMicActive(true);
-      }
+      setIsMicActive(false);
+      setStatus(`Mic Error (${e.error}). Click the button to retry.`);
     };
-
-    // Initial start attempt
-    startMic();
 
     // Cleanup function
     return () => {
       if (recognitionInstance) {
-        recognitionInstance.stop();
+        // Use abort for cleanup to avoid triggering onend/onerror
+        recognitionInstance.abort(); 
       }
-      if (synthRef.current.speaking) {
-        synthRef.current.cancel();
-      }
+      stopSpeaking();
       if (backgroundMusicRef.current) backgroundMusicRef.current.pause();
       stopTypingSound();
       setRecognition(null);
     };
-  }, [userData?.assistantName, getGeminiResponse, startMic, isMicActive, isApiCalling, isTTSActive]);
+  }, [userData?.assistantName, getGeminiResponse, stopSpeaking, callGeminiAPI]);
 
   return (
     <div
@@ -1719,6 +2527,7 @@ function Home() {
         handlePlayMusic(); // Play music on first interaction
       }}
     >
+      {/* ... (Instructions Div remains unchanged) ... */}
       {showInstructions && (
         <div className="fixed inset-0 bg-[#00000020] backdrop-blur-lg flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full relative">
@@ -1738,8 +2547,9 @@ function Home() {
                 {userData?.assistantName}"**).
               </li>
               <li>
-                **STATUS:** Check the status below the assistant's name. Yellow
-                text indicates its current state.
+                **IMPORTANT:** The mic will **NOT** automatically restart after a voice
+                command or error. You must **CLICK** the mic icon to activate it
+                for each command.
               </li>
               <li>
                 You can now **type** in the chat box at the bottom, or talk to
@@ -1768,7 +2578,7 @@ function Home() {
         </div>
       )}
 
-      {/* Header/Nav */}
+      {/* ... (Header/Nav and Mobile Drawer remain unchanged) ... */}
       <div className="w-full h-[12vh] flex items-center justify-end pr-5 lg:pr-10">
         <div className="hidden lg:flex gap-[20px]">
           <button
@@ -1796,7 +2606,6 @@ function Home() {
         </div>
       </div>
 
-      {/* Mobile Hamburger Icon & Drawer */}
       <TbMenuOrder
         className="lg:hidden text-white absolute top-[20px] right-[20px] w-[35px] h-[35px] cursor-pointer z-50"
         onClick={() => setHamburgerOpen(true)}
@@ -1845,7 +2654,7 @@ function Home() {
         </div>
       </div>
 
-      {/* History Drawer */}
+      {/* ... (History Drawer remains unchanged) ... */}
       {showHistoryDrawer && (
         <div
           className="fixed inset-0 bg-transparent z-[60]"
@@ -1910,7 +2719,6 @@ function Home() {
         onClick={handlePlayMusic}
       >
         <audio ref={typingSoundRef} src="/sounds/typing.mp3" preload="auto" />
-        {/* <audio ref={backgroundMusicRef} src="/sounds/background.mp3" preload="auto" /> */}
 
         <div className="flex flex-col lg:flex-row gap-10 lg:gap-[100px] justify-center lg:justify-start items-center lg:items-start min-h-[calc(100vh-12vh)] lg:min-h-[calc(100vh-12vh-40px)]">
           {/* Assistant Info */}
@@ -1930,10 +2738,17 @@ function Home() {
             {/* Status and Mic Button */}
             <p 
                 className="text-[#F78B00] text-[17px] font-medium mt-2 text-center max-w-[200px] cursor-pointer transition-colors hover:text-red-400"
-                onClick={!isMicActive && !isApiCalling ? startMic : null} // Manual restart on click
+                onClick={manualToggleMic}
             >
               <span className="flex items-center justify-center gap-2">
-                {isMicActive ? <FiMic className="text-green-400 w-5 h-5 animate-pulse" /> : <FiMicOff className="text-gray-400 w-5 h-5" />}
+                {/* Show Mic Icon based on isMicActive and isApiCalling */}
+                {isApiCalling ? (
+                    <FiMicOff className="text-red-400 w-5 h-5" /> 
+                ) : isMicActive ? (
+                    <FiMic className="text-green-400 w-5 h-5 animate-pulse" /> 
+                ) : (
+                    <FiMicOff className="text-gray-400 w-5 h-5" />
+                )}
                 {status}
               </span>
             </p>
@@ -1990,25 +2805,21 @@ function Home() {
                 value={userInputText}
                 onChange={(e) => {
                     setUserInputText(e.target.value);
-                    // Temporarily update status when user is typing
                     if (!isApiCalling) {
                         setStatus("Typing Conversation Active...");
                     }
                 }}
                 onFocus={() => {
                     // Stop listening when user focuses on input
-                    if (recognition) {
-                        recognition.stop();
-                        setIsMicActive(false);
-                    }
+                    stopMic();
                     if (!isApiCalling) {
                         setStatus("Typing Conversation Active...");
                     }
                 }}
                 onBlur={() => {
-                    // Restart mic if input is empty after unfocusing
-                    if (!userInputText.trim() && !isApiCalling && !isTTSActive) {
-                       startMic();
+                    // Reset status if input is empty and not busy
+                    if (!userInputText.trim() && !isApiCalling) {
+                       setStatus("Mic is OFF. Click the button to speak.");
                     }
                 }}
                 placeholder={`Type your message here (e.g., "${userData?.assistantName}, what is the weather?")...`}
