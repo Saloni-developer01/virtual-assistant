@@ -1176,14 +1176,14 @@ function Home() {
             {/* NEW: Input Box for Typing */}
             <form
               onSubmit={handleTextInput}
-              className="flex w-full bg-white bg-opacity-20 backdrop-blur-sm rounded-b-lg border border-[#FF3366]/20 p-2 shadow-xl"
+              className="flex w-full bg-white bg-opacity-20 backdrop-blur-sm rounded-b-lg border border-[#15B8F3]/20 p-2 shadow-xl"
             >
               <input
                 type="text"
                 value={userInputText}
                 onChange={(e) => setUserInputText(e.target.value)}
                 placeholder={`Type your message here (e.g., "${userData?.assistantName}, what is the weather?")...`}
-                className="flex-grow p-3 bg-transparent text-white placeholder-gray-200 focus:outline-none text-base md:text-lg"
+                className="flex-grow p-3 bg-transparent text-black placeholder-gray-400 focus:outline-none text-base md:text-lg"
               />
               <button
                 type="submit"
