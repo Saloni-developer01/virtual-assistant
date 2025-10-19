@@ -591,8 +591,8 @@ import React, { useContext, useEffect, useState, useRef } from "react";
 import { userDataContext } from "../context/UserContext.jsx";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { TbMenuOrder, TbX } from "react-icons/tb"; // TbArrowsCross ko TbX se replace kar diya for consistency
-import { TbArrowsCross } from "react-icons/tb"; // Agar TbArrowsCross hi chahiye toh rehne do
+import { TbMenuOrder, TbX } from "react-icons/tb";
+import { TbArrowsCross } from "react-icons/tb";
 
 function Home() {
   const { userData, serverUrl, setUserData, getGeminiResponse } =
@@ -606,7 +606,6 @@ function Home() {
 
   const [hasInteracted, setHasInteracted] = useState(false);
 
-  // History Drawer ko large screens par bhi use kar sakte hain
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
 
   const [showInstructions, setShowInstructions] = useState(() => {
@@ -820,14 +819,12 @@ function Home() {
 
   return (
     <div
-      // Full viewport height, no y-overflow globally, bg gradient
       className="min-h-screen bg-gradient-to-t from-[#fffff] to-[#48A1B1] overflow-x-hidden relative"
       onClick={() => {
         setHasInteracted(true);
         setShowInstructions(false);
       }}
     >
-      {/* 1. Instructions Modal (No change needed, already responsive) */}
       {showInstructions && (
         <div className="fixed inset-0 bg-[#00000020] backdrop-blur-lg flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full relative">
@@ -876,8 +873,6 @@ function Home() {
         </div>
       )}
 
-      {/* 2. Desktop Navigation (Top Right Buttons) */}
-      {/* Container for desktop buttons - position relative hataya */}
       <div className="w-full h-[12vh] flex items-center justify-end pr-5 lg:pr-10">
         <div className="hidden lg:flex gap-[20px]">
           <button
@@ -911,9 +906,7 @@ function Home() {
         onClick={() => setHamburgerOpen(true)}
       />
 
-      {/* 4. Mobile Menu Drawer (Hamburger Menu) */}
       <div
-        // 'translate-x-full' se menu screen ke bahar chala jaayega
         className={`fixed lg:hidden top-0 right-0 w-3/4 max-w-[300px] h-full 
           bg-[#48A1B1] bg-opacity-90 backdrop-blur-md 
           p-5 flex flex-col gap-5 
@@ -923,7 +916,7 @@ function Home() {
         }
       >
         <TbArrowsCross
-          className="text-white absolute top-[20px] right-[20px] w-[30px] h-[30px] cursor-pointer"
+          className="text-white absolute top-[20px] right-[20px] w-[30px] h-[30px] cursor-pointer z-50"
           onClick={() => setHamburgerOpen(false)}
         />
 
@@ -956,50 +949,12 @@ function Home() {
           </button>
         </div>
 
-        {/* History Section in Mobile Menu (Drawer) - Aapne yeh section pehle bhi dala tha, so maine isse separate 'History Drawer' se hata diya hai taaki confusion na ho */}
-        {/* Agar aap history sirf is menu mein dikhana chahti hain to yeh code use karein: */}
-        {/* <h1 className="text-white font-semibold text-[19px] mt-[30px]">
-          History
-        </h1>
-        <div className="w-full h-[2px] bg-gray-400"></div>
-
-        <div className="w-full flex-grow overflow-y-auto flex flex-col gap-[15px] p-1">
-          {userData?.history?.length === 0 ? (
-            <p className="text-gray-400 mt-4 text-sm">
-              No past conversations found.
-            </p>
-          ) : (
-            userData?.history
-              ?.slice()
-              .reverse()
-              .map((item, index) => (
-                <div
-                  key={index}
-                  className="bg-[#2D2D2D] p-3 rounded-lg border-l-4 border-[#48A1B1] shadow-md"
-                >
-                  <p className="text-white text-sm font-semibold mb-1">
-                    You:
-                    <span className="text-gray-300 font-normal ml-2">
-                      {item.user}
-                    </span>
-                  </p>
-                  <p className="text-white text-sm font-semibold mt-2">
-                    {userData?.assistantName}:
-                    <span className="text-gray-400 font-normal ml-2 line-clamp-2">
-                      {item.assistant}
-                    </span>
-                  </p>
-                </div>
-              ))
-          )}
-        </div> */}
       </div>
 
-      {/* 5. History Drawer (Same as pehle, thoda cleanup kiya) */}
+
       {showHistoryDrawer && (
-        // Overlay for History Drawer
         <div 
-            className="fixed inset-0 bg-black bg-opacity-30 z-40" 
+            className="fixed inset-0 bg-[#48A1B1] bg-opacity-30 z-40" 
             onClick={() => setShowHistoryDrawer(false)}
         >
           <div
@@ -1008,14 +963,14 @@ function Home() {
             border-l border-white/20 
             z-50 p-5 shadow-2xl transition-transform duration-300 ease-in-out 
             lg:bg-gradient-to-br lg:from-white/10 lg:to-[#48A1B1]/30"
-            onClick={(e) => e.stopPropagation()} // Drawer click hone par band na ho
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-[#5A655A]">
                 Conversation History
               </h2>
-              <TbX // Changed icon from TbArrowsCross to TbX (cross) for better UI
-                className="text-[#5A655A] w-8 h-8 cursor-pointer hover:text-red-400"
+              <TbX 
+                className="text-[#5A655A] w-8 h-8 cursor-pointer hover:text-red-400 z-50"
                 onClick={() => setShowHistoryDrawer(false)}
               />
             </div>
@@ -1053,18 +1008,16 @@ function Home() {
         </div>
       )}
 
-      {/* 6. Main Content Area (Assistant Avatar & Chat Log) */}
       <div
-        className="w-full p-5 pt-0 lg:p-10 lg:pt-5" // p-5 to provide overall padding
+        className="w-full p-5 pt-0 lg:p-10 lg:pt-5" 
         onClick={handlePlayMusic}
       >
         <audio ref={typingSoundRef} src="/sounds/typing.mp3" preload="auto" />
 
         <div className="flex flex-col lg:flex-row gap-10 lg:gap-[100px] justify-center lg:justify-start items-center lg:items-start min-h-[calc(100vh-12vh)] lg:min-h-[calc(100vh-12vh-40px)]">
           
-          {/* Assistant Info Column */}
           <div className="flex flex-col items-center lg:items-start mt-10 lg:mt-0">
-            <div className="w-[180px] h-[180px] md:w-[200px] md:h-[200px] flex overflow-hidden shadow-lg shadow-[white] p-[10px] rounded-full"> {/* Made it circular */}
+            <div className="w-[180px] h-[180px] md:w-[200px] md:h-[200px] flex overflow-hidden shadow-lg shadow-[white] p-[10px] rounded-sm"> 
               <img
                 src={userData?.assistantImage}
                 alt="Assistant Image"
@@ -1080,13 +1033,12 @@ function Home() {
             </p>
           </div>
 
-          {/* Chat Log/Conversation Area */}
           <div className="w-full max-w-4xl lg:max-w-[700px] p-4 md:p-[30px] bg-white bg-opacity-10 rounded-lg overflow-y-auto h-[65vh] lg:h-[500px] border border-[#FF3366]/20 backdrop-blur-sm shadow-xl">
             {conversationLog.length === 0 && (
               <div className="flex items-center justify-center h-full">
-                <p className="text-gray-300 text-lg font-medium text-center p-4 select-none">
+                <p className="text-gray-500 text-lg font-medium text-center p-4 select-none">
                   Your conversations will appear here. Start by saying: "
-                  <strong className="text-white">{userData?.assistantName}</strong>..."
+                  <strong className="text-gray-500">{userData?.assistantName}</strong>..."
                 </p>
               </div>
             )}
