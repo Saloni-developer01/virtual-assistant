@@ -1529,9 +1529,8 @@ function Home() {
           <button
             className="w-full h-[50px] text-black font-semibold bg-white rounded-lg text-[18px] px-3 py-2 cursor-pointer text-left hover:bg-gray-100 transition-colors"
             onClick={() => {
-              // Hamburger menu band karo aur History drawer kholo
               setHamburgerOpen(false); 
-              setShowHistoryDrawer(true); // Always set to true when clicked from here
+              setShowHistoryDrawer(true);
             }}
           >
             History
@@ -1546,11 +1545,9 @@ function Home() {
         </div>
       </div>
 
-      {/* 5. History Drawer (Fixed the Cross Icon logic for small screens and background transparency) */}
       {showHistoryDrawer && (
-        // Changed overlay color to black with blur for better contrast/visibility of background
         <div 
-            className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-[60]" // z-[60] is higher than z-50 to ensure it's on top
+            className="fixed inset-0 bg-white backdrop-blur-lg bg-opacity-30 z-[60]" 
             onClick={() => setShowHistoryDrawer(false)}
         >
           <div
@@ -1559,7 +1556,7 @@ function Home() {
             border-l border-white/20 
             z-[70] p-5 shadow-2xl transition-transform duration-300 ease-in-out 
             lg:bg-gradient-to-br lg:from-white/10 lg:to-[#48A1B1]/30"
-            onClick={(e) => e.stopPropagation()} // Drawer click hone par band na ho
+            onClick={(e) => e.stopPropagation()} 
           >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-[#5A655A]">
