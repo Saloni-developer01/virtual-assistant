@@ -1329,13 +1329,19 @@
 
 
 
-import React, { useContext, useEffect, useState, useRef } from "react";
+
+
+
+
+
+
+import React, { useContext, useEffect, useState, useRef, useCallback } from "react";
 import { userDataContext } from "../context/UserContext.jsx";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { TbMenuOrder, TbX } from "react-icons/tb";
 import { TbArrowsCross } from "react-icons/tb";
-import { FiSend } from "react-icons/fi"; // Added for send button
+import { FiSend, FiMic, FiMicOff } from "react-icons/fi"; // Added Mic icons
 
 function Home() {
   const { userData, serverUrl, setUserData, getGeminiResponse } =
@@ -1346,24 +1352,22 @@ function Home() {
   const [status, setStatus] = useState(
     "Ready to Talk. Say " + (userData?.assistantName ? `"${userData.assistantName}"` : "your assistant's name")
   );
-  // New state for user text input
+  
   const [userInputText, setUserInputText] = useState("");
-  // New state to control if mic should be listening
-  const [isMicActive, setIsMicActive] = useState(true);
-  // New state to hold the SpeechRecognition object
+  const [isMicActive, setIsMicActive] = useState(false); // Changed to false initially, will start in useEffect
+  const [isApiCalling, setIsApiCalling] = useState(false);
+  const [isTTSActive, setIsTTSActive] = useState(false);
+
   const [recognition, setRecognition] = useState(null);
 
   const [hasInteracted, setHasInteracted] = useState(false);
-
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
-
   const [showInstructions, setShowInstructions] = useState(() => {
     const hasSeenInstructions = localStorage.getItem(
       "assistant_instructions_seen"
     );
     return hasSeenInstructions !== "true";
   });
-
   const [hamburgerOpen, setHamburgerOpen] = useState(false);
 
   const conversationEndRef = useRef(null);
@@ -1378,13 +1382,35 @@ function Home() {
     }
   }, [conversationLog]);
 
-  const speakAssistantResponse = (text) => {
+  // TTS status check
+  useEffect(() => {
+    const synth = synthRef.current;
+    if (!synth) return;
+
+    const onEnd = () => {
+      setIsTTSActive(false);
+      // If mic was temporarily stopped for TTS, restart it
+      if (!isApiCalling && !userInputText.trim()) {
+        setIsMicActive(true); 
+      }
+    };
+
+    synth.addEventListener('end', onEnd);
+    return () => synth.removeEventListener('end', onEnd);
+  }, [isApiCalling, userInputText]);
+
+
+  const speakAssistantResponse = useCallback((text) => {
     if (synthRef.current.speaking) {
       synthRef.current.cancel();
     }
     const utterance = new SpeechSynthesisUtterance(text);
+    
+    utterance.onstart = () => setIsTTSActive(true);
+    // Utterance.onend is handled by the main useEffect listener
+    
     synthRef.current.speak(utterance);
-  };
+  }, []);
 
   const stopTypingSound = () => {
     if (typingSoundRef.current) {
@@ -1400,13 +1426,33 @@ function Home() {
     }
   };
 
+  const startMic = useCallback(() => {
+      if (recognition && !isApiCalling) {
+          try {
+              recognition.start();
+              setIsMicActive(true);
+              setStatus("Mic Active. Listening...");
+              console.log("Mic Started.");
+          } catch (e) {
+              console.warn("Recognition start error:", e.message);
+              // Already running error is common, so only show error status for other issues
+              if (!e.message.includes("already started")) {
+                setStatus("Mic Error: Try restarting manually.");
+              }
+          }
+      }
+  }, [recognition, isApiCalling]);
+
+
   const callGeminiAPI = async (transcript, isVoiceInput) => {
-    // 1. Pause Mic (Only if it was a voice input, to be safe)
-    if (isVoiceInput && recognition) {
-      setIsMicActive(false);
-      recognition.stop();
-      console.log("Recognition stopped for API call.");
+    setIsApiCalling(true);
+    
+    // Stop mic definitively before API call, regardless of input type
+    if (recognition) {
+        recognition.stop();
+        setIsMicActive(false);
     }
+    
     setStatus("Thinking...");
     startTypingSound();
 
@@ -1426,7 +1472,7 @@ function Home() {
         
         // Update status based on input type
         if (isVoiceInput) {
-            setStatus("Reply Shown. Mic is Back.");
+            setStatus("Reply Shown. Waiting for Voice...");
         } else {
             setStatus("Reply Shown. Ready for Next.");
         }
@@ -1442,11 +1488,10 @@ function Home() {
         }). Try again.`
       );
     } finally {
-      // 2. Restart Mic after a short delay only if it was a voice input
-      if (isVoiceInput) {
-          setTimeout(() => {
-            setIsMicActive(true);
-          }, 500);
+      setIsApiCalling(false);
+      // 2. Restart Mic only if it was a voice input AND TTS is not active
+      if (isVoiceInput && !synthRef.current.speaking) {
+          setTimeout(startMic, 1000); // Give a small delay
       }
     }
   };
@@ -1454,14 +1499,14 @@ function Home() {
   // --- Handlers for user interactions ---
 
   const handleLogout = async () => {
-    // Stop all speech before logging out
+    // Stop everything
     if (synthRef.current.speaking) {
       synthRef.current.cancel();
     }
     stopTypingSound();
     if (recognition) {
-      setIsMicActive(false);
       recognition.stop();
+      setIsMicActive(false);
     }
 
     try {
@@ -1481,14 +1526,20 @@ function Home() {
     }
   };
 
-  // New handler for text input
+  // Handler for text input
   const handleTextInput = (e) => {
     e.preventDefault();
     const trimmedInput = userInputText.trim();
-    if (!trimmedInput) return;
+    if (!trimmedInput || isApiCalling) return;
     
     // Set status to show typing is happening
     setStatus("Typing Conversation Active..."); 
+
+    // Stop mic if it was active
+    if (recognition) {
+        recognition.stop();
+        setIsMicActive(false);
+    }
 
     // Add user text message to log
     setConversationLog((prevLog) => [
@@ -1565,7 +1616,7 @@ function Home() {
     }
   };
 
-  // --- Speech Recognition Logic ---
+  // --- Speech Recognition Setup ---
   useEffect(() => {
     if (showInstructions) {
       localStorage.setItem("assistant_instructions_seen", "true");
@@ -1581,70 +1632,69 @@ function Home() {
     }
 
     const recognitionInstance = new SpeechRecognition();
-    recognitionInstance.continuous = false;
+    recognitionInstance.continuous = true; // Use continuous to keep it listening
+    recognitionInstance.interimResults = false; // Only final results
     recognitionInstance.lang = "en-US";
     setRecognition(recognitionInstance);
 
     recognitionInstance.onresult = async (e) => {
-      const transcript = e.results[e.results.length - 1][0].transcript.trim();
-      setStatus("Heard You. Thinking...");
-      // setIsMicActive(false); // Let callGeminiAPI handle this based on success
+        // Find the latest result that is 'final'
+        const last = e.results.length - 1;
+        const transcript = e.results[last][0].transcript.trim();
 
-      if (
-        transcript
-          .toLowerCase()
-          .includes(userData?.assistantName?.toLowerCase())
-      ) {
-        setConversationLog((prevLog) => [
-          ...prevLog,
-          { source: "user", text: transcript },
-        ]);
+        // Check if the transcript is empty or too short (false positive)
+        if (transcript.length < 3) return; 
 
-        await callGeminiAPI(transcript, true); // Pass 'true' for isVoiceInput
-      } else {
-        setStatus(`Didn't hear "${userData?.assistantName}". Listening again...`);
-        // If wake word is not heard, mic should restart (handled by onend since isMicActive remains true)
-        setTimeout(() => {
-          setIsMicActive(true); // Ensure mic attempts to restart
-        }, 500);
-      }
+        // Stop recognition to process the result
+        recognitionInstance.stop();
+        setIsMicActive(false);
+
+        setStatus("Heard You. Thinking...");
+
+        if (
+            transcript
+            .toLowerCase()
+            .includes(userData?.assistantName?.toLowerCase())
+        ) {
+            setConversationLog((prevLog) => [
+            ...prevLog,
+            { source: "user", text: transcript },
+            ]);
+
+            await callGeminiAPI(transcript, true);
+        } else {
+            setStatus(`Didn't hear "${userData?.assistantName}". Please say the name to start.`);
+            // Restart mic after a short delay if wake word wasn't heard
+            setTimeout(startMic, 1500);
+        }
     };
 
     recognitionInstance.onend = function () {
-      if (isMicActive) {
-        console.log(
-          "Recognition ended (due to silence/timeout). Restarting..."
-        );
-        try {
-          setStatus("Mic Active. Listening...");
-          recognitionInstance.start();
-        } catch (e) {
-          console.warn("Error restarting mic from onend:", e.message);
-        }
-      } else {
-        console.log("Recognition manually stopped or waiting for API/TTS.");
+      console.log("Recognition ended. isMicActive:", isMicActive, "isApiCalling:", isApiCalling);
+      // Only restart if Mic is expected to be active (not during API call or TTS)
+      if (isMicActive && !isApiCalling && !isTTSActive) {
+        console.log("Recognition restarting...");
+        startMic(); 
+      } else if (!isApiCalling && !isTTSActive) {
+          // If stopped due to API/Typing, and now available, set status for manual start
+          setStatus("Mic Stopped. Click here to start voice input.");
       }
     };
 
     recognitionInstance.onerror = function (e) {
       console.error("Recognition error:", e);
-      setStatus("Mic Error. Restarting...");
-      setIsMicActive(true);
+      // Only restart if the error is not 'no-speech' (which is expected during silence)
+      if (e.error !== 'no-speech') {
+        setStatus(`Mic Error (${e.error}). Trying to restart...`);
+        setIsMicActive(true); // Signal to onend to attempt restart
+      } else {
+          // No speech error, just attempt a clean restart
+          setIsMicActive(true);
+      }
     };
 
-    // Initial start
-    try {
-      setStatus("Mic Active. Listening...");
-      recognitionInstance.start();
-      setIsMicActive(true);
-    } catch (e) {
-      console.warn(
-        "Initial recognition start failed (likely already running or user hasn't interacted):",
-        e.message
-      );
-      // If start fails, ensure isMicActive is true so onend can attempt to restart
-      setIsMicActive(true);
-    }
+    // Initial start attempt
+    startMic();
 
     // Cleanup function
     return () => {
@@ -1658,7 +1708,7 @@ function Home() {
       stopTypingSound();
       setRecognition(null);
     };
-  }, [userData?.assistantName, getGeminiResponse, isMicActive]);
+  }, [userData?.assistantName, getGeminiResponse, startMic, isMicActive, isApiCalling, isTTSActive]);
 
   return (
     <div
@@ -1688,16 +1738,12 @@ function Home() {
                 {userData?.assistantName}"**).
               </li>
               <li>
-                **STATUS:** Check the status below the assistant's name to know
-                if the mic is **'Listening'** or if you are **'Typing'**.
+                **STATUS:** Check the status below the assistant's name. Yellow
+                text indicates its current state.
               </li>
               <li>
                 You can now **type** in the chat box at the bottom, or talk to
                 it.
-              </li>
-              <li>
-                You can ask the assistant to search anything on **Google** or
-                **YouTube**.
               </li>
             </ul>
             <p className="mt-6 text-xl font-bold text-center text-gray-800">
@@ -1880,9 +1926,18 @@ function Home() {
             <h1 className="text-white text-[22px] font-bold text-center mt-4">
               I'm {userData?.assistantName}
             </h1>
-            <p className="text-[#F78B00] text-[17px] font-medium mt-2 text-center max-w-[200px]">
-              {status}
+            
+            {/* Status and Mic Button */}
+            <p 
+                className="text-[#F78B00] text-[17px] font-medium mt-2 text-center max-w-[200px] cursor-pointer transition-colors hover:text-red-400"
+                onClick={!isMicActive && !isApiCalling ? startMic : null} // Manual restart on click
+            >
+              <span className="flex items-center justify-center gap-2">
+                {isMicActive ? <FiMic className="text-green-400 w-5 h-5 animate-pulse" /> : <FiMicOff className="text-gray-400 w-5 h-5" />}
+                {status}
+              </span>
             </p>
+            
           </div>
 
           {/* Chat Window */}
@@ -1936,29 +1991,34 @@ function Home() {
                 onChange={(e) => {
                     setUserInputText(e.target.value);
                     // Temporarily update status when user is typing
-                    setStatus("Typing Conversation Active...");
+                    if (!isApiCalling) {
+                        setStatus("Typing Conversation Active...");
+                    }
                 }}
                 onFocus={() => {
                     // Stop listening when user focuses on input
                     if (recognition) {
-                        setIsMicActive(false);
                         recognition.stop();
+                        setIsMicActive(false);
                     }
-                    setStatus("Typing Conversation Active...");
+                    if (!isApiCalling) {
+                        setStatus("Typing Conversation Active...");
+                    }
                 }}
                 onBlur={() => {
                     // Restart mic if input is empty after unfocusing
-                    if (!userInputText.trim()) {
-                        setIsMicActive(true);
+                    if (!userInputText.trim() && !isApiCalling && !isTTSActive) {
+                       startMic();
                     }
                 }}
                 placeholder={`Type your message here (e.g., "${userData?.assistantName}, what is the weather?")...`}
                 className="flex-grow p-3 bg-transparent text-white placeholder-gray-200 focus:outline-none text-base md:text-lg"
+                disabled={isApiCalling}
               />
               <button
                 type="submit"
                 className="p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400"
-                disabled={!userInputText.trim()}
+                disabled={!userInputText.trim() || isApiCalling}
               >
                 <FiSend className="w-6 h-6" />
               </button>
