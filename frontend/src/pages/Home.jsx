@@ -1547,7 +1547,7 @@ function Home() {
 
       {showHistoryDrawer && (
         <div 
-            className="fixed inset-0 bg-white backdrop-blur-lg bg-opacity-30 z-[60]" 
+            className="fixed inset-0 bg-white backdrop-blur-lg bg-transparent z-[60]" 
             onClick={() => setShowHistoryDrawer(false)}
         >
           <div
