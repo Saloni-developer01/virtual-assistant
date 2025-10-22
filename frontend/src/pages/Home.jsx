@@ -759,6 +759,22 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import React, { useContext, useEffect, useState, useRef } from "react";
 import { userDataContext } from "../context/UserContext.jsx";
 import { useNavigate } from "react-router-dom";
@@ -781,7 +797,7 @@ function Home() {
   const [isMicActive, setIsMicActive] = useState(true);
   const [recognition, setRecognition] = useState(null);
   
-  // NEW STATE: To track if Assistant is currently speaking (TTS)
+  // To track if Assistant is currently speaking (TTS) - Ab yeh sirf status ke liye hai, loop control ke liye nahi.
   const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false); 
 
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -802,6 +818,35 @@ function Home() {
   const typingSoundRef = useRef(null);
   const synthRef = useRef(window.speechSynthesis);
 
+  // Helper to safely start recognition
+  const startRecognition = (recInstance) => {
+    if (recInstance) {
+      try {
+        recInstance.start();
+        setStatus("Listening...");
+        setIsMicActive(true); // Mic state ko update kiya
+        console.log("Mic started/restarted.");
+      } catch (e) {
+        if (!e.message.includes("already started")) {
+            console.warn("Error starting mic:", e.message);
+        }
+      }
+    }
+  };
+
+  // Helper to safely stop recognition
+  const stopRecognition = (recInstance) => {
+    if (recInstance) {
+      try {
+        recInstance.stop();
+        setIsMicActive(false); // Mic state ko update kiya
+        console.log("Mic stopped.");
+      } catch (e) {
+        console.warn("Error stopping mic:", e.message);
+      }
+    }
+  };
+  
   useEffect(() => {
     if (conversationEndRef.current) {
       conversationEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -809,21 +854,47 @@ function Home() {
   }, [conversationLog]);
 
   const speakAssistantResponse = (text) => {
-    if (synthRef.current.speaking) {
-      synthRef.current.cancel();
+    // Mic ko turant band karo taaki woh TTS sound na sun le
+    if (recognition) {
+        stopRecognition(recognition);
     }
     
-    // CHANGE 1: Set state before speaking starts
-    setIsAssistantSpeaking(true); 
+    // TTS shuru hone se pehle state set karo
+    setIsAssistantSpeaking(true);
+    setStatus("Assistant Speaking...");
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    synthRef.current.speak(utterance);
+    // TTS Logic
+    const startSpeaking = () => {
+        if (synthRef.current.speaking) {
+            synthRef.current.cancel();
+        }
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        synthRef.current.speak(utterance);
 
-    utterance.onend = () => {
-      // CHANGE 2: Set state after speaking ends
-      setIsAssistantSpeaking(false); 
-      // isMicActive will be set to true in the next useEffect, which is clean
-    };
+        utterance.onend = () => {
+            setIsAssistantSpeaking(false);
+            setStatus("Ready to listen.");
+            // TTS khatam hone par, mic ko auto restart karo
+            // Recognition object set ho chuka hoga pehle useEffect mein
+            setTimeout(() => {
+                startRecognition(recognition);
+            }, 500); // Thoda sa delay diya taaki TTS resources free ho jaayein
+        };
+
+        utterance.onerror = (event) => {
+            console.error('Speech Synthesis Error:', event);
+            setIsAssistantSpeaking(false);
+            setStatus("TTS Error. Restarting mic.");
+            // Error hone par bhi mic ko auto restart karo
+            setTimeout(() => {
+                startRecognition(recognition);
+            }, 500);
+        };
+    }
+
+    // TTS ko thoda delay se start karo taaki React state update ho sake aur mic band ho sake
+    setTimeout(startSpeaking, 100); 
   };
 
   const stopTypingSound = () => {
@@ -841,11 +912,7 @@ function Home() {
   };
 
   const callGeminiAPI = async (transcript) => {
-    if (recognition) {
-      setIsMicActive(false);
-      recognition.stop();
-      console.log("Recognition stopped for API call.");
-    }
+    // Recognition ko 'onresult' mein already stop kar diya gaya hai
     setStatus("Thinking...");
     startTypingSound();
 
@@ -860,13 +927,14 @@ function Home() {
           { source: "assistant", text: data.response },
         ]);
 
-        speakAssistantResponse(data.response); // This starts TTS and sets isAssistantSpeaking=true
+        speakAssistantResponse(data.response); // Mic restart is handled inside this function's onend
         handleCommand(data);
-        setStatus("Reply shown.");
+        setStatus("Reply shown. Waiting for TTS to finish...");
       } else {
         setStatus("Assistant did not return a response.");
+        // If no response, mic should restart immediately
         setTimeout(() => {
-          setIsMicActive(true); // Restart mic if no response
+          startRecognition(recognition);
         }, 500);
       }
     } catch (error) {
@@ -877,8 +945,9 @@ function Home() {
           error.response?.status || error.message
         }). Try again.`
       );
+      // If API fails, mic should restart immediately
       setTimeout(() => {
-        setIsMicActive(true); // Restart mic if API fails
+        startRecognition(recognition);
       }, 500);
     }
   };
@@ -890,8 +959,7 @@ function Home() {
     }
     stopTypingSound();
     if (recognition) {
-      setIsMicActive(false);
-      recognition.stop();
+      stopRecognition(recognition); // Helper use kiya
     }
 
     try {
@@ -986,7 +1054,7 @@ function Home() {
     }
   };
 
-  // 1. Speech Recognition Setup
+  // --- Main Speech Recognition Setup & Loop Logic (Optimized) ---
   useEffect(() => {
     if (showInstructions) {
       localStorage.setItem("assistant_instructions_seen", "true");
@@ -1004,14 +1072,14 @@ function Home() {
     const recognitionInstance = new SpeechRecognition();
     recognitionInstance.continuous = false;
     recognitionInstance.lang = "en-US";
-    setRecognition(recognitionInstance);
+    setRecognition(recognitionInstance); // Recognition instance set kiya
 
     recognitionInstance.onresult = async (e) => {
       const transcript = e.results[e.results.length - 1][0].transcript.trim();
       setStatus("Heard: " + transcript);
 
-      recognitionInstance.stop();
-      setIsMicActive(false);
+      // Jab kuch sun liya, toh mic ko band kar do taaki woh aage ki recording na kare
+      stopRecognition(recognitionInstance); // isMicActive automatically false ho jayega
 
       setConversationLog((prevLog) => [
         ...prevLog,
@@ -1024,30 +1092,30 @@ function Home() {
       await callGeminiAPI(callText);
     };
 
+    // Yahi main auto-restart loop hai
     recognitionInstance.onend = function () {
-      // isMicActive: True ka matlab mic ko dobara start karna hai
-      // isAssistantSpeaking: False ka matlab Assistant bol chuka hai
-      if (isMicActive && !isAssistantSpeaking) { // CHANGE 3: isAssistantSpeaking check add kiya
-        console.log("Recognition ended. Restarting...");
-        try {
-          setStatus("Listening...");
-          recognitionInstance.start();
-        } catch (e) {
-          console.warn("Error restarting mic from onend:", e.message);
-        }
+      // isMicActive: True ka matlab humne manually stop nahi kiya, aur TTS chal nahi raha hai
+      if (isMicActive && !isAssistantSpeaking) { 
+        console.log("Recognition ended naturally. Restarting...");
+        // isMicActive true hai toh startRecognition call ho jayega (jo khud hi status aur state update karta hai)
+        startRecognition(recognitionInstance);
       } else {
-        console.log("Recognition manually stopped or waiting for TTS to finish.");
-        // Agar TTS chal raha hai (isAssistantSpeaking=true), toh mic ko abhi restart nahi karenge.
-        // Jab TTS khatam hoga, toh isAssistantSpeaking=false ho jayega, aur neeche wala useEffect mic ko start kar dega.
+        console.log("Recognition manually stopped (for API/TTS) or is currently speaking.");
+        // Yahaan kuch nahi karenge. Mic ko TTS ke onend ya API fail hone par restart kiya jayega.
       }
     };
 
     recognitionInstance.onerror = function (e) {
       console.error("Recognition error:", e);
-      setStatus("Mic Error. Restarting...");
-      setIsMicActive(true);
+      // Agar 'no-speech' error hai, toh woh onend ko trigger karta hai, isliye yahan kuch nahi karte.
+      // Agar koi aur fatal error hai, toh 1 second baad restart karne ki koshish karo.
+      if (e.error !== 'no-speech') {
+        setStatus("Mic Error. Retrying...");
+        setTimeout(() => startRecognition(recognitionInstance), 1000);
+      }
     };
 
+    // Cleanup function
     return () => {
       if (recognitionInstance) {
         recognitionInstance.stop();
@@ -1058,28 +1126,21 @@ function Home() {
       if (backgroundMusicRef.current) backgroundMusicRef.current.pause();
       stopTypingSound();
     };
-  }, [userData?.assistantName, getGeminiResponse, isAssistantSpeaking]); // isAssistantSpeaking ko dependency mein add kiya
+  }, [userData?.assistantName, getGeminiResponse]); // Dependencies simple rakhe, taaki loop na bane
 
-  // 2. Control Mic Start/Stop based on state
+
+  // --- Mic Control useEffect: Sirf Initial Start ke liye ---
+  // Yeh useEffect sirf ek baar run hoga initial component load par
   useEffect(() => {
-    if (recognition && isMicActive && !isAssistantSpeaking) { 
-        // Mic tabhi start hoga jab isMicActive true ho AUR Assistant bol na raha ho
-        try {
-            recognition.start();
-            setStatus("Listening...");
-            console.log("Mic started/restarted due to state change.");
-        } catch (e) {
-            if (!e.message.includes("already started")) {
-                console.warn("Error explicitly starting mic:", e.message);
-            }
-        }
-    } else if (recognition && (isAssistantSpeaking || !isMicActive)) {
-        // Agar Assistant bol raha hai, toh mic stop kar do
-        recognition.stop();
-        setStatus(isAssistantSpeaking ? "Assistant Speaking..." : "Waiting for assistant...");
-        console.log("Mic stopped due to isAssistantSpeaking/isMicActive change.");
+    // Initial start
+    if (recognition && isMicActive) {
+        // Ek chota sa delay de rahe hain taaki component mount ho jaaye
+        const timer = setTimeout(() => {
+            startRecognition(recognition);
+        }, 100);
+        return () => clearTimeout(timer);
     }
-  }, [isMicActive, recognition, isAssistantSpeaking]);
+  }, [recognition]); // Sirf recognition set hone par chalta hai
 
 
   return (
