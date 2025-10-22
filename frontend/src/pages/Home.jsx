@@ -1574,6 +1574,47 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import React, { useContext, useEffect, useState, useRef } from "react";
 import { userDataContext } from "../context/UserContext.jsx";
 import { useNavigate } from "react-router-dom";
@@ -1593,7 +1634,7 @@ function Home() {
   );
   const [userInputText, setUserInputText] = useState("");
   // isMicActive: Controls the *looping* start/stop logic
-  const [isMicActive, setIsMicActive] = useState(false); // Changed to false initially, start via user tap
+  const [isMicActive, setIsMicActive] = useState(false); // Initial state: false
   const [recognition, setRecognition] = useState(null);
   
   // isAssistantSpeaking: Status update ke liye rakha hai
@@ -1616,25 +1657,24 @@ function Home() {
   const backgroundMusicRef = useRef(null);
   const typingSoundRef = useRef(null);
   const synthRef = useRef(window.speechSynthesis);
+  const recognitionRef = useRef(null); // Recognition instance ko ref mein store kiya
 
   // Helper to safely start recognition
   // Delay badhaya for mobile stability
   const startRecognition = (recInstance) => {
-    if (recInstance) {
-      setTimeout(() => {
-          try {
-              recInstance.start();
-              setStatus("Listening...");
-              setIsMicActive(true); 
-              console.log("Mic started/restarted.");
-          } catch (e) {
-              if (!e.message.includes("already started")) {
-                  console.warn("Error starting mic:", e.message);
-                  setStatus("Mic Error. Tap to retry.");
-                  setIsMicActive(false); 
-              }
+    if (recInstance && !isAssistantSpeaking) { // Sirf tabhi start karo jab assistant bol nahi raha
+      try {
+          recInstance.start();
+          setStatus("Listening...");
+          setIsMicActive(true); 
+          console.log("Mic started/restarted.");
+      } catch (e) {
+          if (!e.message.includes("already started")) {
+              console.warn("Error starting mic:", e.message);
+              setStatus("Mic Error. Tap to retry.");
+              setIsMicActive(false); 
           }
-      }, 1000); // 1 second ka delay diya
+      }
     }
   };
 
@@ -1659,8 +1699,8 @@ function Home() {
 
   const speakAssistantResponse = (text) => {
     // 1. Mic ko turant band karo taaki TTS sound na sun le
-    if (recognition) {
-        stopRecognition(recognition);
+    if (recognitionRef.current) {
+        stopRecognition(recognitionRef.current);
     }
     
     setIsAssistantSpeaking(true);
@@ -1677,9 +1717,9 @@ function Home() {
         utterance.onend = () => {
             setIsAssistantSpeaking(false);
             setStatus("Ready to listen.");
-            // 3. TTS khatam hone par, mic ko auto restart karo
-            if (recognition) {
-                startRecognition(recognition);
+            // 3. TTS khatam hone par, mic ko auto restart karo (2 second delay nahi denge kyunki TTS ke baad dena sahi nahi)
+            if (recognitionRef.current) {
+                setTimeout(() => startRecognition(recognitionRef.current), 500);
             }
         };
 
@@ -1687,8 +1727,8 @@ function Home() {
             console.error('Speech Synthesis Error:', event);
             setIsAssistantSpeaking(false);
             setStatus("TTS Error. Restarting mic.");
-            if (recognition) {
-                startRecognition(recognition);
+            if (recognitionRef.current) {
+                setTimeout(() => startRecognition(recognitionRef.current), 500);
             }
         };
 
@@ -1709,7 +1749,6 @@ function Home() {
   const startTypingSound = () => {
     if (typingSoundRef.current) {
       typingSoundRef.current.loop = true;
-      // .catch() lagaya taaki mobile par play na hone ki error ko ignore karein
       typingSoundRef.current.play().catch(() => {});
     }
   };
@@ -1736,7 +1775,7 @@ function Home() {
       } else {
         setStatus("Assistant did not return a response.");
         // If no response, mic should restart immediately
-        startRecognition(recognition);
+        setTimeout(() => startRecognition(recognitionRef.current), 500);
       }
     } catch (error) {
       stopTypingSound();
@@ -1747,7 +1786,7 @@ function Home() {
         }). Retrying mic...`
       );
       // If API fails, mic should restart immediately
-      startRecognition(recognition);
+      setTimeout(() => startRecognition(recognitionRef.current), 500);
     }
   };
 
@@ -1757,8 +1796,8 @@ function Home() {
       synthRef.current.cancel();
     }
     stopTypingSound();
-    if (recognition) {
-      stopRecognition(recognition); 
+    if (recognitionRef.current) {
+      stopRecognition(recognitionRef.current); 
     }
 
     try {
@@ -1853,7 +1892,7 @@ function Home() {
     }
   };
 
-  // --- Main Speech Recognition Setup & Loop Logic (Optimized for Mobile) ---
+  // --- Main Speech Recognition Setup & Loop Logic (Optimized for Stability) ---
   useEffect(() => {
     if (showInstructions) {
       localStorage.setItem("assistant_instructions_seen", "true");
@@ -1872,6 +1911,7 @@ function Home() {
     recognitionInstance.continuous = false;
     recognitionInstance.lang = "en-US";
     setRecognition(recognitionInstance); 
+    recognitionRef.current = recognitionInstance; // Ref mein bhi set kiya
 
     recognitionInstance.onresult = async (e) => {
       const transcript = e.results[e.results.length - 1][0].transcript.trim();
@@ -1891,27 +1931,39 @@ function Home() {
       await callGeminiAPI(callText);
     };
 
-    // Yahi main auto-restart loop hai
+    // ***********************************************
+    // Yahi main FIX hai jo hang hone se rokega
     recognitionInstance.onend = function () {
-      // Agar mic active hai aur Assistant bol nahi raha, toh restart karo
-      if (isMicActive && !isAssistantSpeaking) { 
-        console.log("Recognition ended naturally. Attempting restart...");
-        // isMicActive true hai toh startRecognition call ho jayega (jo khud hi status aur state update karta hai)
-        startRecognition(recognitionInstance);
-      } else {
-        console.log("Recognition manually stopped (for API/TTS) or is currently speaking.");
-      }
+        // Recognition end hone par 2 second ka gap do
+        console.log("Recognition ended naturally. Waiting for 2 seconds to restart...");
+        
+        setTimeout(() => {
+            // isMicActive: Check karte hain ki kya humne manually band kiya tha?
+            // isAssistantSpeaking: Check karte hain ki kya assistant bol raha hai?
+            if (isMicActive && !isAssistantSpeaking) { 
+                console.log("2 second passed. Restarting mic.");
+                // isMicActive true hai toh startRecognition call ho jayega
+                startRecognition(recognitionInstance);
+            } else {
+                console.log("Mic manual stop or assistant is speaking. Not restarting.");
+                // Agar manually stop kiya hai, toh status update karo, par restart mat karo
+                if (!isAssistantSpeaking) {
+                     setStatus("Ready to listen.");
+                }
+            }
+        }, 2000); // **2 SECOND DELAY ADDED** - Yahi loop ko slow karega aur hang hone se rokega
     };
+    // ***********************************************
 
     recognitionInstance.onerror = function (e) {
       console.error("Recognition error:", e);
-      // 'no-speech' error onend ko trigger karta hai, isliye yahaan usse ignore karte hain.
+      // Fatal error par, stop karke 1 second baad restart ki koshish karo.
       if (e.error !== 'no-speech') {
         setStatus("Mic Error. Retrying...");
-        // Fatal error par, stop karke 1 second baad restart ki koshish karo.
         stopRecognition(recognitionInstance);
         setTimeout(() => startRecognition(recognitionInstance), 1000);
       }
+      // 'no-speech' error onend ko trigger karta hai, jiske paas ab 2 second ka delay hai.
     };
 
     // Cleanup function
@@ -1925,19 +1977,19 @@ function Home() {
       if (backgroundMusicRef.current) backgroundMusicRef.current.pause();
       stopTypingSound();
     };
-  }, [userData?.assistantName, getGeminiResponse, isMicActive, isAssistantSpeaking]); 
-  // isMicActive aur isAssistantSpeaking ko dependency mein rakha hai, taaki onend loop reliable ho.
+  }, [userData?.assistantName, getGeminiResponse]); 
+  // Dependencies bahut simple rakhe taaki useEffect loop break ho jaye.
 
 
-  // --- Initial Start Trigger (Optimized for Mobile) ---
-  // Yeh useEffect tab chalta hai jab user pehli baar screen pe tap karta hai.
+  // --- Initial Start Trigger ---
   useEffect(() => {
-    if (recognition && hasInteracted && !isMicActive) {
+    if (recognitionRef.current && hasInteracted && !isMicActive) {
       // Agar recognition set hai, user ne tap kiya hai, aur mic active nahi hai, toh start karo
       setStatus("Initializing mic after user interaction...");
-      startRecognition(recognition);
+      // Initial start mein bhi thoda delay de dete hain
+      setTimeout(() => startRecognition(recognitionRef.current), 500);
     }
-  }, [recognition, hasInteracted]);
+  }, [hasInteracted]);
 
 
   return (
