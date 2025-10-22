@@ -23,7 +23,7 @@
 * **React:** For dynamic and reactive user interface development.
 * **Context API:** Efficient state management across components.
 * **Web Speech API:** Core component for voice-to-text and text-to-voice functionality.
-* **CSS Framework (Tailwind/Bootstrap if used):** For responsive styling.
+* **CSS Framework (Tailwind):** For responsive styling.
 
 ### Backend (Server)
 * **Node.js & Express.js:** Robust server-side logic and API handling.
@@ -31,31 +31,3 @@
 * **Gemini API:** AI model integration for natural language processing and response generation.
 * **JWT (JSON Web Tokens):** For secure, stateless user authentication.
 
----
-
-## 🚀 Getting Started
-
-Follow these steps to set up and run the project on your local machine.
-
-### Prerequisites
-
-* Node.js (v18 or higher)
-* MongoDB Instance (Local or cloud service like MongoDB Atlas)
-
-### 1. Backend Setup
-
-```bash
-# Navigate to the backend directory
-cd backend
-
-# Install server dependencies
-npm install
-
-# Create a .env file and configure environment variables
-PORT=5000
-MONGODB_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret_key
-GEMINI_API_KEY=your_gemini_api_key
-
-# Start the backend server
-npm start
