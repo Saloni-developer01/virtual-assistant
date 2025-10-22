@@ -384,10 +384,10 @@ function Home() {
 
             <ul className="text-gray-700 space-y-3 list-disc list-inside">
               <li>Make sure your **microphone** is enabled and working.</li>
-              <li>
+              {/* <li>
                 Your **typing sound** will start playing after your first
                 interaction.
-              </li>
+              </li> */}
               <li>
                 **IMPORTANT:** The assistant will **always** respond to your **voice** now (no wake word needed). For best results, keep questions clear.
               </li>
