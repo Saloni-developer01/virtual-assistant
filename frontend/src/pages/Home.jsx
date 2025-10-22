@@ -1653,6 +1653,24 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import React, { useContext, useEffect, useState, useRef } from "react";
 import { userDataContext } from "../context/UserContext.jsx";
 import { useNavigate } from "react-router-dom";
@@ -1692,7 +1710,6 @@ function Home() {
   const typingSoundRef = useRef(null);
   const synthRef = useRef(window.speechSynthesis);
   const recognitionRef = useRef(null); 
-  // Naya Ref: Is Assistant Speaking ka latest value onend handler ko dene ke liye
   const isAssistantSpeakingRef = useRef(isAssistantSpeaking);
 
   // isAssistantSpeakingRef ko update rakho jab state change ho
@@ -1716,7 +1733,6 @@ function Home() {
           }
       }
     } else if (isAssistantSpeakingRef.current) {
-        // Agar assistant bol raha hai, toh status update kar do, par start mat karo
         console.log("Mic start attempt ignored: Assistant is speaking.");
         setStatus("Waiting for assistant to finish...");
     }
@@ -1783,7 +1799,6 @@ function Home() {
     setTimeout(startSpeaking, 50); 
   };
 
-  // --- Utility Functions (unchanged for brevity) ---
   const stopTypingSound = () => {
     if (typingSoundRef.current) {
       typingSoundRef.current.pause();
@@ -1834,7 +1849,6 @@ function Home() {
     }
   };
 
-  // --- Handlers for user interactions (Unchanged) ---
   const handleLogout = async () => {
     if (synthRef.current.speaking) {
       synthRef.current.cancel();
@@ -1843,22 +1857,100 @@ function Home() {
     if (recognitionRef.current) {
       stopRecognition(recognitionRef.current); 
     }
-    // ... rest of logout logic
+
+    try {
+      localStorage.removeItem("assistant_instructions_seen");
+
+      await axios.get(`${serverUrl}/api/user/logout`, {
+        withCredentials: true,
+      });
+      setUserData(null);
+      navigate("/signin");
+    } catch (error) {
+      localStorage.removeItem("assistant_instructions_seen");
+      setUserData(null);
+      console.log(error);
+      navigate("/signin");
+    }
   };
 
   const handleTextInput = (e) => {
-    // ... text input logic
+    e.preventDefault();
+    const trimmedInput = userInputText.trim();
+    if (!trimmedInput) return;
+
+    setConversationLog((prevLog) => [
+      ...prevLog,
+      { source: "user", text: trimmedInput },
+    ]);
+    setUserInputText("");
+
+    const assistantName = userData?.assistantName;
+    const callText = `${assistantName}, ${trimmedInput}`;
+
+    callGeminiAPI(callText);
   };
 
   const handleCommand = (data) => {
-    // ... command logic
+    const { type, userInput } = data;
+    if (
+      type === "google-search" ||
+      type === "calculator-open" ||
+      type === "weather-show"
+    ) {
+      const query =
+        type === "calculator-open"
+          ? "calculator"
+          : type === "weather-show"
+          ? "weather"
+          : userInput;
+      const encodedQuery = encodeURIComponent(query);
+      window.open(`https://www.google.com/search?q=${encodedQuery}`, "_blank");
+    }
+
+    if (type === "instagram-open") {
+      window.open(`https://www.instagram.com/`, "_blank");
+    }
+
+    if (type === "facebook-open") {
+      window.open(`https://www.facebook.com/`, "_blank");
+    }
+
+    if (type === "youtube-search" || type === "youtube-play") {
+      const query = encodeURIComponent(userInput);
+      window.open(
+        `https://www.youtube.com/results?search_query=${query}`,
+        "_blank"
+      );
+    }
+
+    if (
+      [
+        "general",
+        "get-news",
+        "get-joke",
+        "get-quote",
+        "get-fact",
+        "get-definition",
+        "get-synonym",
+        "get-antonym",
+      ].includes(type)
+    ) {
+      return;
+    }
   };
 
   const handlePlayMusic = () => {
-    // ... music logic
+    if (backgroundMusicRef.current && backgroundMusicRef.current.paused) {
+      backgroundMusicRef.current.volume = 0.3;
+      backgroundMusicRef.current.loop = true;
+      backgroundMusicRef.current
+        .play()
+        .catch((e) => console.log("Music play failed:", e));
+    }
   };
 
-  // --- Main Speech Recognition Setup & Loop Logic (CRITICAL FIXES HERE) ---
+  // --- Main Speech Recognition Setup & Loop Logic ---
   useEffect(() => {
     if (showInstructions) {
       localStorage.setItem("assistant_instructions_seen", "true");
@@ -1901,49 +1993,42 @@ function Home() {
         // Recognition end hone par 2 second ka gap do
         console.log("Recognition ended naturally. Waiting for 2 seconds to restart...");
         
-        // isAssistantSpeakingRef.current: Latest TTS status check
         if (isAssistantSpeakingRef.current) {
              console.log("Assistant is speaking. Restarting mic after TTS onend.");
-             return; // onend of TTS handles restart
+             return; 
         }
         
         setTimeout(() => {
-            // Agar abhi bhi mic active nahi hai, yaani woh khud hi band ho gaya tha
-            // Aur assistant bol nahi raha hai
             if (!isAssistantSpeakingRef.current) { 
                 console.log("2 second passed. Restarting mic.");
                 startRecognition(recognitionInstance);
             } else {
                 console.log("Mic not restarted: Assistant started speaking during the wait.");
-                // Yeh TTS onend ke through restart hoga
             }
-        }, 2000); // **2 SECOND DELAY ADDED** };
+        }, 2000); 
+    };
     // ***********************************************
 
     // ***********************************************
     // FIX 2: Aborted Error Handling
     recognitionInstance.onerror = function (e) {
       console.error("Recognition error:", e);
-      stopRecognition(recognitionInstance); // Stop the current one
+      stopRecognition(recognitionInstance); 
 
       if (e.error === 'aborted') {
-          // This is the CRITICAL ABORTED error (often due to TTS or focus change)
           setStatus("Error: Aborted/Interrupted. Will retry in 5 seconds.");
           console.log("CRITICAL ABORTED ERROR. Delaying restart.");
-          // Is error ke baad turant loop na bane, isliye 5 second ka bada delay
+          
           setTimeout(() => {
-             // Agar TTS nahi chal raha toh hi restart karo
              if (!isAssistantSpeakingRef.current) {
                  startRecognition(recognitionInstance);
              }
           }, 5000); 
       }
       else if (e.error !== 'no-speech') {
-        // Koi aur non-fatal error
         setStatus("Mic Error. Retrying in 1s...");
         setTimeout(() => startRecognition(recognitionInstance), 1000);
       }
-      // 'no-speech' error onend ko trigger karta hai, jiske paas ab 2 second ka delay hai.
     };
     // ***********************************************
 
@@ -1955,10 +2040,10 @@ function Home() {
       if (synthRef.current.speaking) {
         synthRef.current.cancel();
       }
-      // ... rest of cleanup
+      if (backgroundMusicRef.current) backgroundMusicRef.current.pause();
+      stopTypingSound();
     };
-  }, [userData?.assistantName, getGeminiResponse]); 
-  // Dependencies mein sirf stable values rakhe, taaki loop na bane.
+  }, [userData?.assistantName, getGeminiResponse]); // Semicolon removed here: }, [userData?.assistantName, getGeminiResponse])
 
 
   // --- Initial Start Trigger ---
@@ -1971,7 +2056,6 @@ function Home() {
 
 
   return (
-    // ... Rest of the JSX (unchanged for brevity)
     <div
       className="min-h-screen bg-gradient-to-t from-[#fffff] to-[#48A1B1] overflow-x-hidden relative"
       onClick={() => {
@@ -1980,8 +2064,6 @@ function Home() {
         handlePlayMusic();
       }}
     >
-      {/* ... Instructions and other UI components ... */}
-      
       {showInstructions && (
         <div className="fixed inset-0 bg-[#00000020] backdrop-blur-lg flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full relative">
@@ -2033,6 +2115,7 @@ function Home() {
         </div>
       )}
 
+      {/* Header/Nav (Unchanged) */}
       <div className="w-full h-[12vh] flex items-center justify-end pr-5 lg:pr-10">
         <div className="hidden lg:flex gap-[20px]">
           <button
