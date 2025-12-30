@@ -27,6 +27,8 @@ app.get("/", async(req,res) =>{
     res.json(data);
 })
 
+app.get("/", (req, res) => { res.send("Server is running!"); });
+
 app.listen(port, () =>{
     connectDb();
     console.log(`Server is running or port ${port}`);
