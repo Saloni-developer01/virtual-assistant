@@ -31,3 +31,12 @@
 * **Gemini API:** AI model integration for natural language processing and response generation.
 * **JWT (JSON Web Tokens):** For secure, stateless user authentication.
 
+
+---
+
+## 🔗 Live Demo
+
+You can experience the **Virtual Assistant** live here:
+
+👉[Click here to View Live Demo](https://virtual-assistant-0o83.onrender.com/)
+
