@@ -42,8 +42,37 @@ function Home() {
     isAssistantSpeakingRef.current = isAssistantSpeaking;
   }, [isAssistantSpeaking]);
 
+  // const startRecognition = (recInstance) => {
+  //   if (recInstance && !isAssistantSpeakingRef.current) { 
+  //     try {
+  //         recInstance.start();
+  //         setStatus("Listening...");
+  //         setIsMicActive(true); 
+  //         console.log("Mic started/restarted.");
+  //     } catch (e) {
+  //         if (!e.message.includes("already started")) {
+  //             console.warn("Error starting mic:", e.message);
+  //             setStatus("Mic Error. Tap to retry.");
+  //             setIsMicActive(false); 
+  //         }
+  //     }
+  //   } else if (isAssistantSpeakingRef.current) {
+  //       console.log("Mic start attempt ignored: Assistant is speaking.");
+  //       setStatus("Waiting for assistant to finish...");
+  //   }
+  // };
+
+
+
   const startRecognition = (recInstance) => {
-    if (recInstance && !isAssistantSpeakingRef.current) { 
+    // Agar assistant bol raha hai toh mic start mat hone do
+    if (isAssistantSpeakingRef.current) {
+        console.log("Mic start ignored: Assistant is currently speaking.");
+        setStatus("Waiting for assistant to finish...");
+        return;
+    }
+
+    if (recInstance) { 
       try {
           recInstance.start();
           setStatus("Listening...");
@@ -56,9 +85,6 @@ function Home() {
               setIsMicActive(false); 
           }
       }
-    } else if (isAssistantSpeakingRef.current) {
-        console.log("Mic start attempt ignored: Assistant is speaking.");
-        setStatus("Waiting for assistant to finish...");
     }
   };
 
@@ -80,12 +106,54 @@ function Home() {
     }
   }, [conversationLog]);
 
+  // const speakAssistantResponse = (text) => {
+  //   if (recognitionRef.current) {
+  //       stopRecognition(recognitionRef.current);
+  //   }
+    
+  //   setIsAssistantSpeaking(true);
+  //   setStatus("Assistant Speaking...");
+
+  //   const startSpeaking = () => {
+  //       if (synthRef.current.speaking) {
+  //           synthRef.current.cancel();
+  //       }
+        
+  //       const utterance = new SpeechSynthesisUtterance(text);
+        
+  //       utterance.onend = () => {
+  //           setIsAssistantSpeaking(false);
+  //           setStatus("Ready to listen.");
+  //           if (recognitionRef.current) {
+  //               setTimeout(() => startRecognition(recognitionRef.current), 500);
+  //           }
+  //       };
+
+  //       utterance.onerror = (event) => {
+  //           console.error('Speech Synthesis Error:', event);
+  //           setIsAssistantSpeaking(false);
+  //           setStatus("TTS Error. Restarting mic.");
+  //           if (recognitionRef.current) {
+  //               setTimeout(() => startRecognition(recognitionRef.current), 500);
+  //           }
+  //       };
+
+  //       synthRef.current.speak(utterance);
+  //   }
+
+  //   setTimeout(startSpeaking, 50); 
+  // };
+
+
+
   const speakAssistantResponse = (text) => {
+    // 1. Pehle hi mic ko turant stop kar do taaki assistant ki aawaz mic capture na kare
     if (recognitionRef.current) {
-        stopRecognition(recognitionRef.current);
+      stopRecognition(recognitionRef.current);
     }
     
     setIsAssistantSpeaking(true);
+    isAssistantSpeakingRef.current = true; // Ref ko bhi turant update karo
     setStatus("Assistant Speaking...");
 
     const startSpeaking = () => {
@@ -95,20 +163,30 @@ function Home() {
         
         const utterance = new SpeechSynthesisUtterance(text);
         
+        utterance.onstart = () => {
+          // Extra safety: Bolte waqt mic band rakho
+          if (recognitionRef.current) {
+            stopRecognition(recognitionRef.current);
+          }
+        };
+
         utterance.onend = () => {
             setIsAssistantSpeaking(false);
+            isAssistantSpeakingRef.current = false;
             setStatus("Ready to listen.");
+            // Bolne ke baad thoda gap dekar mic start karo
             if (recognitionRef.current) {
-                setTimeout(() => startRecognition(recognitionRef.current), 500);
+                setTimeout(() => startRecognition(recognitionRef.current), 1000);
             }
         };
 
         utterance.onerror = (event) => {
             console.error('Speech Synthesis Error:', event);
             setIsAssistantSpeaking(false);
+            isAssistantSpeakingRef.current = false;
             setStatus("TTS Error. Restarting mic.");
             if (recognitionRef.current) {
-                setTimeout(() => startRecognition(recognitionRef.current), 500);
+                setTimeout(() => startRecognition(recognitionRef.current), 1000);
             }
         };
 
@@ -118,6 +196,7 @@ function Home() {
     setTimeout(startSpeaking, 50); 
   };
 
+  
   const stopTypingSound = () => {
     if (typingSoundRef.current) {
       typingSoundRef.current.pause();
@@ -132,7 +211,47 @@ function Home() {
     }
   };
 
+  // const callGeminiAPI = async (transcript) => {
+  //   setStatus("Thinking...");
+  //   startTypingSound();
+
+  //   try {
+  //     const data = await getGeminiResponse(transcript);
+
+  //     stopTypingSound();
+
+  //     if (data && data.response) {
+  //       setConversationLog((prevLog) => [
+  //         ...prevLog,
+  //         { source: "assistant", text: data.response },
+  //       ]);
+
+  //       speakAssistantResponse(data.response); 
+  //       handleCommand(data);
+  //       setStatus("Reply shown. Waiting for assistant to speak...");
+  //     } else {
+  //       setStatus("Assistant did not return a response.");
+  //       setTimeout(() => startRecognition(recognitionRef.current), 500);
+  //     }
+  //   } catch (error) {
+  //     stopTypingSound();
+  //     console.error("Gemini API Error:", error);
+  //     setStatus(
+  //       `Error: API failed (${
+  //         error.response?.status || error.message
+  //       }). Retrying mic...`
+  //     );
+  //     setTimeout(() => startRecognition(recognitionRef.current), 500);
+  //   }
+  // };
+
+
   const callGeminiAPI = async (transcript) => {
+    // API call hone se pehle mic ko turant stop karo taaki background noise ya echo na jaye
+    if (recognitionRef.current) {
+      stopRecognition(recognitionRef.current);
+    }
+
     setStatus("Thinking...");
     startTypingSound();
 
@@ -147,9 +266,8 @@ function Home() {
           { source: "assistant", text: data.response },
         ]);
 
-        speakAssistantResponse(data.response); 
         handleCommand(data);
-        setStatus("Reply shown. Waiting for assistant to speak...");
+        speakAssistantResponse(data.response); // Ye andar khud mic handle kar lega
       } else {
         setStatus("Assistant did not return a response.");
         setTimeout(() => startRecognition(recognitionRef.current), 500);
@@ -162,10 +280,12 @@ function Home() {
           error.response?.status || error.message
         }). Retrying mic...`
       );
-      setTimeout(() => startRecognition(recognitionRef.current), 500);
+      setTimeout(() => startRecognition(recognitionRef.current), 1000);
     }
   };
 
+
+  
   const handleLogout = async () => {
     if (synthRef.current.speaking) {
       synthRef.current.cancel();
