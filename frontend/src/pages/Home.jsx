@@ -279,7 +279,7 @@ function Home() {
         `Error: API failed (${
           error.response?.status || error.message
         }). Retrying mic...`
-      );
+      );recognitionInstance
       setTimeout(() => startRecognition(recognitionRef.current), 1000);
     }
   };
@@ -407,8 +407,35 @@ function Home() {
     setRecognition(recognitionInstance); 
     recognitionRef.current = recognitionInstance; 
 
-    recognitionInstance.onresult = async (e) => {
-      const transcript = e.results[e.results.length - 1][0].transcript.trim();
+    // recognitionInstance.onresult = async (e) => {
+    //   const transcript = e.results[e.results.length - 1][0].transcript.trim();
+    //   setStatus("Heard: " + transcript);
+
+    //   stopRecognition(recognitionInstance); 
+
+    //   setConversationLog((prevLog) => [
+    //     ...prevLog,
+    //     { source: "user", text: transcript },
+    //   ]);
+
+    //   const assistantName = userData?.assistantName;
+    //   const callText = `${assistantName}, ${transcript}`;
+
+    //   await callGeminiAPI(callText);
+    // };
+
+
+
+
+recognitionInstance.onresult = async (e) => {
+      // Direct result lene ki jagah isFinal check lagayein
+      const lastIndex = e.results.length - 1;
+      const isFinal = e.results[lastIndex].isFinal;
+      const transcript = e.results[lastIndex][0].transcript.trim();
+
+      // Jab tak user bolna khatam na kare (isFinal = true), tab tak API call mat karo
+      if (!isFinal || !transcript) return;
+
       setStatus("Heard: " + transcript);
 
       stopRecognition(recognitionInstance); 
@@ -423,6 +450,9 @@ function Home() {
 
       await callGeminiAPI(callText);
     };
+
+
+
 
     recognitionInstance.onend = function () {
         console.log("Recognition ended naturally. Waiting for 2 seconds to restart...");
