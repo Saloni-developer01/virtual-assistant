@@ -43,6 +43,106 @@ export const updateAssistant = async (req, res) => {
 
 
 
+// export const askToAssistant = async (req, res) => {
+//     try {
+//         const { command } = req.body;
+//         const user = await User.findById(req.userId);
+//         if (!user) {
+//             return res.status(404).json({ response: "User not found." });
+//         }
+
+//         const userName = user.name;
+//         const assistantName = user.assistantName;
+//         const result = await geminiResponse(command, assistantName, userName);
+
+//         const jsonMatch = result.match(/{[\s\S]*}/);
+//         if (!jsonMatch) {
+//             return res.status(400).json({ response: "Sorry, I am unable to process your request at the moment." });
+//         }
+
+//         const gemResult = JSON.parse(jsonMatch[0]);
+//         const type = gemResult.type;
+
+//         let responseData = {
+//             type,
+//             userInput: gemResult.userInput,
+//             response: "" 
+//         };
+
+//         switch (type) {
+//             case "get-date":
+//                 responseData.response = `current date is ${moment().format("YYYY-MM-DD")}`;
+//                 break;
+//             case "get-time":
+//                 responseData.response = `current time is ${moment().format("hh:mm A")}`;
+//                 break;
+//             case "get-day":
+//                 responseData.response = `today is ${moment().format("dddd")}`;
+//                 break;
+//             case "get-month":
+//                 responseData.response = `today is ${moment().format("MMMM")}`;
+//                 break;
+//             case "get-year":
+//                 responseData.response = `current year is ${moment().format("YYYY")}`;
+//                 break;
+
+//             case "google-search":
+//             case "youtube-search":
+//             case "youtube-play":
+//             case "general":
+//             case "calculator-open":
+//             case "instagram-open":
+//             case "facebook-open":
+//             case "weather-show":
+//             case "get-news":
+//             case "get-joke":
+//             case "get-quote":
+//             case "get-fact":
+//             case "get-definition":
+//             case "get-synonym":
+//             case "get-antonym":
+//             case "set-reminder":
+//             case "set-alarm":
+//             case "set-timer":
+//             case "open-application":
+//             case "close-application":
+//             case "play-music":
+//             case "pause-music":
+//             case "stop-music":
+//             case "next-track":
+//             case "previous-track":
+//             case "mute-volume":
+//             case "increase-volume":
+//             case "decrease-volume":
+//                 responseData.response = gemResult.response;
+//                 break;
+                
+//             // default:
+//             //     return res.status(400).json({ response: "Sorry, I didn't understand that command." });
+//             default:
+//             // Agar type match na ho, toh kam se kam error dene ki jagah general response de do
+//             responseData.type = "general";
+//             responseData.response = gemResult.response || "I have processed your request.";
+//             break;
+//         }
+
+//         user.history.push({ 
+//             user: command, 
+//             assistant: responseData.response 
+//         });
+//         await user.save();
+        
+//         return res.json(responseData);
+
+//     } catch (error) {
+//         console.error("askToAssistant error:", error);
+//         return res.status(500).json({ response: "askToAssistant error" });
+//     }
+// }
+
+
+
+
 export const askToAssistant = async (req, res) => {
     try {
         const { command } = req.body;
@@ -55,20 +155,38 @@ export const askToAssistant = async (req, res) => {
         const assistantName = user.assistantName;
         const result = await geminiResponse(command, assistantName, userName);
 
-        const jsonMatch = result.match(/{[\s\S]*}/);
+        // Safe JSON parsing (agar Gemini plain text bhi de de toh error na aaye)
+        const jsonMatch = result ? result.match(/{[\s\S]*}/) : null;
+        let gemResult;
+
         if (!jsonMatch) {
-            return res.status(400).json({ response: "Sorry, I am unable to process your request at the moment." });
+            // Agar JSON nahi mila toh plain text ko hi response bana lo
+            gemResult = {
+                type: "general",
+                userInput: command,
+                response: result || "I am here."
+            };
+        } else {
+            try {
+                gemResult = JSON.parse(jsonMatch[0]);
+            } catch (e) {
+                gemResult = {
+                    type: "general",
+                    userInput: command,
+                    response: result
+                };
+            }
         }
 
-        const gemResult = JSON.parse(jsonMatch[0]);
-        const type = gemResult.type;
+        const type = gemResult.type || "general";
 
         let responseData = {
             type,
-            userInput: gemResult.userInput,
-            response: "" 
+            userInput: gemResult.userInput || command,
+            response: gemResult.response || "I didn't catch that clearly."
         };
 
+        // Switch case ko safe banaya hai taaki default mein 400 error na aaye
         switch (type) {
             case "get-date":
                 responseData.response = `current date is ${moment().format("YYYY-MM-DD")}`;
@@ -86,44 +204,10 @@ export const askToAssistant = async (req, res) => {
                 responseData.response = `current year is ${moment().format("YYYY")}`;
                 break;
 
-            case "google-search":
-            case "youtube-search":
-            case "youtube-play":
-            case "general":
-            case "calculator-open":
-            case "instagram-open":
-            case "facebook-open":
-            case "weather-show":
-            case "get-news":
-            case "get-joke":
-            case "get-quote":
-            case "get-fact":
-            case "get-definition":
-            case "get-synonym":
-            case "get-antonym":
-            case "set-reminder":
-            case "set-alarm":
-            case "set-timer":
-            case "open-application":
-            case "close-application":
-            case "play-music":
-            case "pause-music":
-            case "stop-music":
-            case "next-track":
-            case "previous-track":
-            case "mute-volume":
-            case "increase-volume":
-            case "decrease-volume":
-                responseData.response = gemResult.response;
-                break;
-                
-            // default:
-            //     return res.status(400).json({ response: "Sorry, I didn't understand that command." });
             default:
-            // Agar type match na ho, toh kam se kam error dene ki jagah general response de do
-            responseData.type = "general";
-            responseData.response = gemResult.response || "I have processed your request.";
-            break;
+                // Ab default mein error dene ki jagah gemResult ka response bhej denge
+                responseData.response = gemResult.response || "I am processing your request.";
+                break;
         }
 
         user.history.push({ 
@@ -136,6 +220,6 @@ export const askToAssistant = async (req, res) => {
 
     } catch (error) {
         console.error("askToAssistant error:", error);
-        return res.status(500).json({ response: "askToAssistant error" });
+        return res.status(500).json({ response: "askToAssistant server error" });
     }
-}
+};
