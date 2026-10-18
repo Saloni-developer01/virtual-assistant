@@ -117,8 +117,13 @@ export const askToAssistant = async (req, res) => {
                 responseData.response = gemResult.response;
                 break;
                 
+            // default:
+            //     return res.status(400).json({ response: "Sorry, I didn't understand that command." });
             default:
-                return res.status(400).json({ response: "Sorry, I didn't understand that command." });
+            // Agar type match na ho, toh kam se kam error dene ki jagah general response de do
+            responseData.type = "general";
+            responseData.response = gemResult.response || "I have processed your request.";
+            break;
         }
 
         user.history.push({ 
