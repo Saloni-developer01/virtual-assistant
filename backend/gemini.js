@@ -102,23 +102,14 @@
 
 
 
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-
-
-
-import axios from "axios";
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const geminiResponse = async (command, assistantName, userName) => {
     try {
-        const apiUrl = process.env.GEMINI_API_URL;
-        if (!apiUrl) {
-            console.error("GEMINI_API_URL is missing in environment variables!");
-            return JSON.stringify({
-                type: "general",
-                userInput: command,
-                response: "Configuration error. Please check environment variables on Render."
-            });
-        }
+        // Yahan SDK khud latest working model utha lega
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         const prompt = `You are a virtual assistant named ${assistantName} for ${userName}. 
 User says: "${command}"
@@ -130,34 +121,21 @@ You MUST respond in ONLY strict JSON format, with no markdown code blocks, no ba
   "response": "Give a short, friendly, natural voice response here."
 }`;
 
-        const result = await axios.post(apiUrl, {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
-        });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const rawText = response.text();
 
-        const rawText = result.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!rawText) {
-            return JSON.stringify({
-                type: "general",
-                userInput: command,
-                response: "I didn't get any response from Gemini."
-            });
-        }
-        
-        // Clean markdown backticks safely
         const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
         return cleanedText;
         
     } catch (error) {
-        console.error("Gemini API Error:", error.response?.data || error.message); 
-        // Crash hone ki jagah ek valid JSON return karega taaki 400/500 error na aaye
+        console.error("Gemini SDK Error:", error.message); 
         return JSON.stringify({
             type: "general",
             userInput: command,
             response: "Sorry, I am having trouble connecting right now."
         });
     }
-}
+};
 
 export default geminiResponse;
