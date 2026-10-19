@@ -109,7 +109,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const geminiResponse = async (command, assistantName, userName) => {
     try {
         // Yahan SDK khud latest working model utha lega
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
         const prompt = `You are a virtual assistant named ${assistantName} for ${userName}. 
 User says: "${command}"
